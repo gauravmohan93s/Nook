@@ -2,15 +2,24 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, BookOpen, Shield, Zap, ArrowRight, ChevronLeft } from 'lucide-react';
-import Navbar from '@/components/Navbar';
+import { Search, BookOpen, Shield, Zap, ArrowRight, ChevronLeft, Headphones, Sparkles, Bookmark } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { useSession } from 'next-auth/react';
 
 export default function Home() {
+  const { data: session } = useSession();
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [articleHtml, setArticleHtml] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [isSummarizing, setIsSummarizing] = useState(false);
+  const [summary, setSummary] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  
+  // Smart Audio State
+  const [audioSrc, setAudioSrc] = useState<string | null>(null);
+  const [currentParaIndex, setCurrentParaIndex] = useState(-1);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   const handleUnlock = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,12 +28,16 @@ export default function Home() {
     setLoading(true);
     setError('');
     setArticleHtml(null);
+    setSummary('');
 
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
       const res = await fetch(`${apiUrl}/api/unlock`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+            'Content-Type': 'application/json',
+            'X-User-Email': session?.user?.email || ''
+        },
         body: JSON.stringify({ url }),
       });
 
@@ -46,30 +59,177 @@ export default function Home() {
     }
   };
 
+  const handleSummarize = async () => {
+    setIsSummarizing(true);
+    try {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/summarize`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url })
+        });
+        const data = await res.json();
+        setSummary(data.summary);
+    } catch (e) {
+        alert("Failed to summarize");
+    } finally {
+        setIsSummarizing(false);
+    }
+  };
+
+  // --- SMART AUDIO PLAYER LOGIC ---
+  const playNextParagraph = () => {
+      const reader = document.getElementById('nook-reader');
+      if (!reader) return;
+      
+      const paragraphs = Array.from(reader.querySelectorAll('p, h1, h2, h3, blockquote')); // specific readable elements
+      const nextIndex = currentParaIndex + 1;
+
+      if (nextIndex >= paragraphs.length) {
+          setAudioSrc(null); // End of article
+          setCurrentParaIndex(-1);
+          setIsPlaying(false);
+          return;
+      }
+
+      const p = paragraphs[nextIndex] as HTMLElement;
+      
+      // 1. Highlight
+      // Remove old highlights
+      document.querySelectorAll('#nook-reader .bg-yellow-100').forEach(el => 
+          el.classList.remove('bg-yellow-100', 'transition-colors', 'duration-500', 'p-2', 'rounded')
+      );
+      // Add new highlight
+      p.classList.add('bg-yellow-100', 'transition-colors', 'duration-500', 'p-2', 'rounded');
+      
+      // 2. Scroll
+      p.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+      // 3. Play
+      const text = p.textContent?.trim();
+      if (text && text.length > 0) {
+          setAudioSrc(`${process.env.NEXT_PUBLIC_API_URL}/api/speak?text=${encodeURIComponent(text)}`);
+          setCurrentParaIndex(nextIndex);
+          setIsPlaying(true);
+      } else {
+          // Skip empty paragraphs
+          setCurrentParaIndex(nextIndex);
+          playNextParagraph();
+      }
+  };
+
+  const handleListen = () => {
+      if (isPlaying) {
+          // Stop
+          setAudioSrc(null);
+          setIsPlaying(false);
+          setCurrentParaIndex(-1);
+          // Clear highlights
+          document.querySelectorAll('#nook-reader .bg-yellow-100').forEach(el => 
+              el.classList.remove('bg-yellow-100', 'p-2', 'rounded')
+          );
+      } else {
+          // Start
+          setCurrentParaIndex(-1); // Reset
+          // Use timeout to allow state reset before starting
+          setTimeout(() => playNextParagraph(), 100);
+      }
+  };
+
+  const handleSave = async () => {
+      if (!session?.user?.email) return alert("Please login to save stories.");
+      setIsSaving(true);
+      try {
+          await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/save?title=Saved Story`, {
+              method: 'POST',
+              headers: { 
+                  'Content-Type': 'application/json',
+                  'X-User-Email': session.user.email 
+              },
+              body: JSON.stringify({ url })
+          });
+          alert("Saved to Library!");
+      } catch (e) {
+          alert("Failed to save");
+      } finally {
+          setIsSaving(false);
+      }
+  };
+
   // --- READER VIEW ---
   if (articleHtml) {
+    // Parse Summary: split by '*' or '-' and filter empty
+    const summaryPoints = summary
+        ? summary.split(/[*•-]/).map(s => s.trim()).filter(s => s.length > 10)
+        : [];
+
     return (
-      <div className="min-h-screen bg-[#FDFBF7]"> {/* Creamy paper background */}
-        <Navbar />
+      <div className="min-h-screen bg-[#FDFBF7] pb-24">
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="max-w-3xl mx-auto px-6 py-12"
         >
-            <Button 
-              variant="ghost" 
-              onClick={() => setArticleHtml(null)}
-              className="mb-8 pl-0 hover:pl-2 transition-all text-gray-500"
-            >
-              <ChevronLeft className="w-4 h-4 mr-1" />
-              Back to Search
-            </Button>
+            {/* Toolbar */}
+            <div className="flex items-center justify-between mb-8 pb-4 border-b border-gray-200">
+                <Button 
+                    variant="ghost" 
+                    onClick={() => { setArticleHtml(null); setAudioSrc(null); setIsPlaying(false); }}
+                    className="pl-0 hover:pl-2 transition-all text-gray-500"
+                >
+                    <ChevronLeft className="w-4 h-4 mr-1" />
+                    Back
+                </Button>
+                
+                <div className="flex space-x-2">
+                    <Button variant={isPlaying ? "primary" : "secondary"} size="sm" onClick={handleListen} title="Listen (TTS)">
+                        <Headphones className="w-4 h-4 mr-2" />
+                        {isPlaying ? 'Stop Listening' : 'Listen'}
+                    </Button>
+                    <Button variant="secondary" size="sm" onClick={handleSummarize} disabled={isSummarizing}>
+                        <Sparkles className="w-4 h-4 mr-2 text-amber-500" />
+                        {isSummarizing ? 'Thinking...' : 'Summarize'}
+                    </Button>
+                     <Button variant="secondary" size="sm" onClick={handleSave} disabled={isSaving}>
+                        <Bookmark className="w-4 h-4 mr-2" />
+                        Save
+                    </Button>
+                </div>
+            </div>
+
+            {/* AI Summary Card */}
+            {summaryPoints.length > 0 && (
+                <div className="mb-8 p-6 bg-amber-50 rounded-xl border border-amber-100 text-amber-900 animate-fade-in">
+                    <h4 className="font-bold flex items-center mb-4">
+                        <Sparkles className="w-4 h-4 mr-2" /> Nook Note
+                    </h4>
+                    <ul className="space-y-3">
+                        {summaryPoints.map((point, i) => (
+                            <li key={i} className="flex items-start">
+                                <span className="mr-2 text-amber-600">•</span>
+                                <span className="text-sm leading-relaxed">{point}</span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
             
-            <article 
+            <div 
+              id="nook-reader"
               className="prose prose-lg prose-slate md:prose-xl max-w-none font-serif prose-headings:font-serif prose-headings:font-bold prose-p:text-gray-800 prose-a:text-indigo-600"
               dangerouslySetInnerHTML={{ __html: articleHtml }}
             />
         </motion.div>
+
+        {/* Hidden Audio Player for Logic */}
+        {audioSrc && (
+            <audio 
+                autoPlay 
+                src={audioSrc} 
+                onEnded={playNextParagraph}
+                onError={() => console.log("Audio Error, skipping")}
+                className="hidden"
+            />
+        )}
       </div>
     );
   }
