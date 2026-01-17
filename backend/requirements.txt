@@ -5,3 +5,7 @@ beautifulsoup4
 feedparser
 python-dotenv
 openai
+readability-lxml
+sqlalchemy
+gTTS
+google-generativeai
