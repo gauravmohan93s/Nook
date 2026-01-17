@@ -15,9 +15,9 @@ export default function Home() {
     setResult(null);
 
     try {
-      // In production, this would point to your FastAPI backend
-      // For now, we mock the response or assume the backend is on port 8000
-      const res = await fetch('http://localhost:8000/api/unlock', {
+      // Use environment variable or fallback to localhost
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const res = await fetch(`${apiUrl}/api/unlock`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url }),
