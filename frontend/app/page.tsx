@@ -81,11 +81,11 @@ export default function Home() {
       const reader = document.getElementById('nook-reader');
       if (!reader) return;
       
-      const paragraphs = Array.from(reader.querySelectorAll('p, h1, h2, h3, blockquote')); // specific readable elements
+      const paragraphs = Array.from(reader.querySelectorAll('p, h1, h2, h3, blockquote')); 
       const nextIndex = currentParaIndex + 1;
 
       if (nextIndex >= paragraphs.length) {
-          setAudioSrc(null); // End of article
+          setAudioSrc(null); 
           setCurrentParaIndex(-1);
           setIsPlaying(false);
           return;
@@ -93,25 +93,18 @@ export default function Home() {
 
       const p = paragraphs[nextIndex] as HTMLElement;
       
-      // 1. Highlight
-      // Remove old highlights
       document.querySelectorAll('#nook-reader .bg-yellow-100').forEach(el => 
           el.classList.remove('bg-yellow-100', 'transition-colors', 'duration-500', 'p-2', 'rounded')
       );
-      // Add new highlight
       p.classList.add('bg-yellow-100', 'transition-colors', 'duration-500', 'p-2', 'rounded');
-      
-      // 2. Scroll
       p.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-      // 3. Play
       const text = p.textContent?.trim();
       if (text && text.length > 0) {
           setAudioSrc(`${process.env.NEXT_PUBLIC_API_URL}/api/speak?text=${encodeURIComponent(text)}`);
           setCurrentParaIndex(nextIndex);
           setIsPlaying(true);
       } else {
-          // Skip empty paragraphs
           setCurrentParaIndex(nextIndex);
           playNextParagraph();
       }
@@ -119,18 +112,14 @@ export default function Home() {
 
   const handleListen = () => {
       if (isPlaying) {
-          // Stop
           setAudioSrc(null);
           setIsPlaying(false);
           setCurrentParaIndex(-1);
-          // Clear highlights
           document.querySelectorAll('#nook-reader .bg-yellow-100').forEach(el => 
               el.classList.remove('bg-yellow-100', 'p-2', 'rounded')
           );
       } else {
-          // Start
-          setCurrentParaIndex(-1); // Reset
-          // Use timeout to allow state reset before starting
+          setCurrentParaIndex(-1); 
           setTimeout(() => playNextParagraph(), 100);
       }
   };
@@ -157,7 +146,6 @@ export default function Home() {
 
   // --- READER VIEW ---
   if (articleHtml) {
-    // Parse Summary: split by '*' or '-' and filter empty
     const summaryPoints = summary
         ? summary.split(/[*•-]/).map(s => s.trim()).filter(s => s.length > 10)
         : [];
@@ -169,7 +157,6 @@ export default function Home() {
           animate={{ opacity: 1, y: 0 }}
           className="max-w-3xl mx-auto px-6 py-12"
         >
-            {/* Toolbar */}
             <div className="flex items-center justify-between mb-8 pb-4 border-b border-gray-200">
                 <Button 
                     variant="ghost" 
@@ -196,7 +183,6 @@ export default function Home() {
                 </div>
             </div>
 
-            {/* AI Summary Card */}
             {summaryPoints.length > 0 && (
                 <div className="mb-8 p-6 bg-amber-50 rounded-xl border border-amber-100 text-amber-900 animate-fade-in">
                     <h4 className="font-bold flex items-center mb-4">
@@ -220,13 +206,12 @@ export default function Home() {
             />
         </motion.div>
 
-        {/* Hidden Audio Player for Logic */}
         {audioSrc && (
             <audio 
                 autoPlay 
                 src={audioSrc} 
                 onEnded={playNextParagraph}
-                onError={() => console.log("Audio Error, skipping")}
+                onError={() => console.log("Audio Error")}
                 className="hidden"
             />
         )}
@@ -237,17 +222,12 @@ export default function Home() {
   // --- LANDING VIEW ---
   return (
     <div className="min-h-screen flex flex-col bg-white overflow-hidden relative">
-      <Navbar />
-      
-      {/* Decorative Background Mesh */}
       <div className="absolute top-0 inset-x-0 h-[600px] bg-gradient-to-b from-indigo-50/50 to-transparent -z-10" />
       <div className="absolute -top-[200px] -right-[200px] w-[600px] h-[600px] bg-indigo-100/30 rounded-full blur-3xl -z-10" />
       <div className="absolute top-[100px] -left-[200px] w-[500px] h-[500px] bg-emerald-50/40 rounded-full blur-3xl -z-10" />
 
       <main className="flex-1 flex flex-col items-center pt-24 pb-16 px-4 sm:px-6">
         <div className="w-full max-w-4xl space-y-16 text-center">
-          
-          {/* Hero Text */}
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -258,19 +238,16 @@ export default function Home() {
               <span className="w-2 h-2 bg-indigo-500 rounded-full mr-2"></span>
               Beta Access
             </div>
-            
             <h1 className="text-6xl md:text-7xl font-serif font-bold text-gray-900 leading-[1.1] tracking-tight">
               Unlock knowledge. <br/>
               <span className="text-gray-400 italic font-medium">Without barriers.</span>
             </h1>
-            
             <p className="text-xl text-gray-500 max-w-2xl mx-auto font-light leading-relaxed">
               Access premium insights from top publications instantly. 
               Distraction-free, curated, and designed for deep reading.
             </p>
           </motion.div>
 
-          {/* Search Input */}
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -278,7 +255,6 @@ export default function Home() {
             className="max-w-xl mx-auto w-full relative group"
           >
             <div className="absolute inset-0 bg-indigo-500/5 rounded-2xl blur-xl transition-all group-hover:bg-indigo-500/10"></div>
-            
             <div className="relative bg-white p-2 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100 flex items-center transition-all focus-within:ring-2 focus-within:ring-indigo-500/20 focus-within:border-indigo-500">
                <Search className="w-6 h-6 text-gray-400 ml-4" />
                <input 
@@ -290,12 +266,7 @@ export default function Home() {
                   onChange={(e) => setUrl(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleUnlock(e as any)}
                />
-               <Button 
-                  size="lg"
-                  onClick={handleUnlock}
-                  isLoading={loading}
-                  className="rounded-xl"
-               >
+               <Button size="lg" onClick={handleUnlock} isLoading={loading} className="rounded-xl">
                  {!loading && <ArrowRight className="w-5 h-5" />}
                </Button>
             </div>
@@ -314,7 +285,6 @@ export default function Home() {
             </AnimatePresence>
           </motion.div>
 
-          {/* Features Grid */}
           <motion.div 
              initial={{ opacity: 0, y: 40 }}
              animate={{ opacity: 1, y: 0 }}
@@ -335,11 +305,9 @@ export default function Home() {
               </div>
             ))}
           </motion.div>
-
         </div>
       </main>
 
-      {/* Simple Footer */}
       <footer className="py-8 text-center text-gray-400 text-sm border-t border-gray-100">
         <p>© 2026 Nook Inc. democratizing knowledge.</p>
       </footer>
