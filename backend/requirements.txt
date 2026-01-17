@@ -6,6 +6,8 @@ feedparser
 python-dotenv
 openai
 readability-lxml
+lxml
+lxml_html_clean
 sqlalchemy
 gTTS
 google-generativeai
