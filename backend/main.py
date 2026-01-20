@@ -738,9 +738,9 @@ async def summarize_article(
             print(f"Using Gemini Model: {valid_model}")
             
             model = genai.GenerativeModel(valid_model)
-            prompt = f"Summarize the following article in 3 concise, insightful bullet points. Focus on the main arguments and takeaways. 
+            prompt = f"""Summarize the following article in 3 concise, insightful bullet points. Focus on the main arguments and takeaways. 
 
-Article: {content[:10000]}"
+Article: {content[:10000]}"""
             
             response = await model.generate_content_async(prompt)
             return {"summary": response.text}
