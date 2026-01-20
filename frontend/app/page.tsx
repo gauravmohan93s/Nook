@@ -11,6 +11,7 @@ export default function Home() {
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [articleHtml, setArticleHtml] = useState<string | null>(null);
+  const [articleMeta, setArticleMeta] = useState<{ source?: string; license?: string } | null>(null);
   const [error, setError] = useState('');
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [summary, setSummary] = useState('');
@@ -28,16 +29,19 @@ export default function Home() {
     setLoading(true);
     setError('');
     setArticleHtml(null);
+    setArticleMeta(null);
     setSummary('');
 
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+      const headers: HeadersInit = { 'Content-Type': 'application/json' };
+      if (session?.id_token) {
+          headers['Authorization'] = `Bearer ${session.id_token}`;
+      }
+
       const res = await fetch(`${apiUrl}/api/unlock`, {
         method: 'POST',
-        headers: { 
-            'Content-Type': 'application/json',
-            'X-User-Email': session?.user?.email || ''
-        },
+        headers,
         body: JSON.stringify({ url }),
       });
 
@@ -49,6 +53,7 @@ export default function Home() {
       const data = await res.json();
       if (data.success && data.html) {
         setArticleHtml(data.html);
+        setArticleMeta({ source: data.source, license: data.license });
       } else {
         throw new Error('Could not parse article content.');
       }
@@ -62,9 +67,14 @@ export default function Home() {
   const handleSummarize = async () => {
     setIsSummarizing(true);
     try {
+        const headers: HeadersInit = { 'Content-Type': 'application/json' };
+        if (session?.id_token) {
+            headers['Authorization'] = `Bearer ${session.id_token}`;
+        }
+        
         const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/summarize`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify({ url })
         });
         const data = await res.json();
@@ -125,15 +135,17 @@ export default function Home() {
   };
 
   const handleSave = async () => {
-      if (!session?.user?.email) return alert("Please login to save stories.");
+      if (!session) return alert("Please login to save stories.");
       setIsSaving(true);
       try {
+          const headers: HeadersInit = { 'Content-Type': 'application/json' };
+          if (session?.id_token) {
+            headers['Authorization'] = `Bearer ${session.id_token}`;
+          }
+
           await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/save?title=Saved Story`, {
               method: 'POST',
-              headers: { 
-                  'Content-Type': 'application/json',
-                  'X-User-Email': session.user.email 
-              },
+              headers,
               body: JSON.stringify({ url })
           });
           alert("Saved to Library!");
@@ -159,14 +171,29 @@ export default function Home() {
         >
             <div className="flex items-center justify-between mb-8 pb-4 border-b border-gray-200">
                 <Button 
-                    variant="ghost" 
+                    variant="ghost"
                     onClick={() => { setArticleHtml(null); setAudioSrc(null); setIsPlaying(false); }}
                     className="pl-0 hover:pl-2 transition-all text-gray-500"
                 >
                     <ChevronLeft className="w-4 h-4 mr-1" />
                     Back
                 </Button>
-                
+
+                {articleMeta && (
+                    <div className="flex items-center space-x-2 text-xs text-gray-500">
+                        {articleMeta.source && (
+                            <span className="px-2 py-1 rounded-full bg-gray-100 uppercase tracking-wide">
+                                {articleMeta.source}
+                            </span>
+                        )}
+                        {articleMeta.license && (
+                            <span className="px-2 py-1 rounded-full bg-emerald-50 text-emerald-700">
+                                {articleMeta.license}
+                            </span>
+                        )}
+                    </div>
+                )}
+
                 <div className="flex space-x-2">
                     <Button variant={isPlaying ? "primary" : "secondary"} size="sm" onClick={handleListen} title="Listen (TTS)">
                         <Headphones className="w-4 h-4 mr-2" />

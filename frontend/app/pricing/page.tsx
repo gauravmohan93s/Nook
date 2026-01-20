@@ -2,30 +2,107 @@
 
 import { Check } from "lucide-react";
 import { useSession } from "next-auth/react";
-import Navbar from "@/components/Navbar";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+
+// Add Razorpay types to window object
+declare global {
+  interface Window {
+    Razorpay: any;
+  }
+}
 
 export default function Pricing() {
   const { data: session } = useSession();
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+
+  // Load Razorpay Script dynamically
+  useEffect(() => {
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    document.body.appendChild(script);
+    
+    return () => {
+        document.body.removeChild(script);
+    };
+  }, []);
 
   const handleUpgrade = async () => {
-      if (!session?.user?.email) return alert("Please login first.");
+      if (!session) return alert("Please login first.");
+      setLoading(true);
       
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/upgrade`, {
-          method: 'POST',
-          headers: { 'X-User-Email': session.user.email }
-      });
-      
-      if (res.ok) {
-          alert("Welcome to Insider! You now have unlimited reads.");
-      } else {
-          alert("Upgrade failed. Please try again.");
+      try {
+        // 1. Create Order
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/create-order`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${session.id_token}` }
+        });
+        
+        const order = await res.json();
+        if (!order.order_id) {
+            throw new Error(order.detail || "Failed to create order");
+        }
+
+        // 2. Open Razorpay Modal
+        const options = {
+            key: order.key_id,
+            amount: order.amount,
+            currency: order.currency,
+            name: "Nook",
+            description: "Upgrade to Nook Insider",
+            image: "/logo.png", // Ensure you have a logo at public/logo.png
+            order_id: order.order_id,
+            handler: async function (response: any) {
+                // 3. Verify Payment on Backend
+                try {
+                    const verifyRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/verify-payment`, {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${session.id_token}` 
+                        },
+                        body: JSON.stringify({
+                            razorpay_payment_id: response.razorpay_payment_id,
+                            razorpay_order_id: response.razorpay_order_id,
+                            razorpay_signature: response.razorpay_signature
+                        })
+                    });
+                    
+                    if (verifyRes.ok) {
+                        alert("Payment Successful! Welcome to Nook Insider.");
+                        router.refresh(); // Refresh to update UI based on new tier
+                    } else {
+                        alert("Payment verification failed. Please contact support.");
+                    }
+                } catch (e) {
+                    alert("Verification error.");
+                }
+            },
+            prefill: {
+                name: session.user?.name,
+                email: session.user?.email,
+            },
+            theme: {
+                color: "#4F46E5"
+            }
+        };
+
+        const rzp1 = new window.Razorpay(options);
+        rzp1.open();
+        
+      } catch (e: any) {
+          alert(e.message || "An error occurred.");
+      } finally {
+          setLoading(false);
       }
   };
 
   const tiers = [
     {
       name: "Seeker",
-      price: "$0",
+      price: "₹0",
       desc: "For the casual reader.",
       features: ["3 AI unlocks per day", "Curated news feed", "Weekly newsletter"],
       cta: "Current Plan",
@@ -34,17 +111,17 @@ export default function Pricing() {
     },
     {
       name: "Insider",
-      price: "$2.99",
+      price: "₹299",
       period: "/mo",
       desc: "For the knowledge worker.",
       features: ["Unlimited unlocks", "AI Summaries (GPT-4)", "Audio narration (TTS)", "Save to Library"],
-      cta: "Upgrade to Insider",
+      cta: loading ? "Processing..." : "Upgrade to Insider",
       featured: true,
       action: handleUpgrade
     },
     {
       name: "Patron",
-      price: "$5.99",
+      price: "₹599",
       period: "/mo",
       desc: "For the power user.",
       features: ["All Insider features", "Early access to new tools", "Priority support", "No Ads promise"],
@@ -88,6 +165,7 @@ export default function Pricing() {
 
               <button 
                 onClick={tier.action}
+                disabled={loading}
                 className={`w-full py-4 rounded-xl font-semibold transition-colors ${tier.featured ? 'bg-primary text-white hover:bg-indigo-700' : 'bg-gray-100 text-gray-900 hover:bg-gray-200'}`}
               >
                 {tier.cta}

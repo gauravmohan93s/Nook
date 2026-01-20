@@ -10,14 +10,16 @@ export default function Library() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (session?.user?.email) {
+    if (session?.id_token) {
       fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/library`, {
-        headers: { 'X-User-Email': session.user.email }
+        headers: { 'Authorization': `Bearer ${session.id_token}` }
       })
       .then(res => res.json())
       .then(data => setArticles(data))
       .catch(err => console.error(err))
       .finally(() => setLoading(false));
+    } else if (session === null) {
+        setLoading(false);
     }
   }, [session]);
 

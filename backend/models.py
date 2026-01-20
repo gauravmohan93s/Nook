@@ -1,7 +1,8 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, create_engine
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, create_engine, Index
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
 from datetime import datetime
+import os
 
 Base = declarative_base()
 
@@ -38,9 +39,25 @@ class UsageLog(Base):
     
     user = relationship("User", back_populates="usage_logs")
 
+class ContentCache(Base):
+    __tablename__ = "content_cache"
+    __table_args__ = (
+        Index("ix_content_cache_url_source", "url", "source", unique=True),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    url = Column(String, nullable=False)
+    source = Column(String, nullable=False)
+    license = Column(String, nullable=True)
+    content_html = Column(String, nullable=True)
+    content_text = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
 # Database Setup
-DATABASE_URL = "sqlite:///./nook.db"
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./nook.db")
+connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+engine = create_engine(DATABASE_URL, connect_args=connect_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def init_db():

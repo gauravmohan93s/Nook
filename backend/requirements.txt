@@ -4,10 +4,14 @@ httpx
 beautifulsoup4
 feedparser
 python-dotenv
-openai
 readability-lxml
 lxml
 lxml_html_clean
 sqlalchemy
+psycopg2-binary
+alembic
 gTTS
 google-generativeai
+google-auth
+razorpay
+python-jose[cryptography]
