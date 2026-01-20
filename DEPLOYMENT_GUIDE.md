@@ -64,14 +64,20 @@ This guide walks you through deploying Nook (Frontend + Backend) with **Razorpay
 
 ## Phase 4: Database Setup
 
-Once your backend is live on Render:
+Since the Render "Shell" is only available on paid plans, we will configure the app to run migrations automatically on startup.
 
-1.  **Connect to Shell:** In Render Dashboard > Nook Backend > Shell.
-2.  **Run Migrations:**
-    ```bash
-    python -m alembic upgrade head
-    ```
-    This creates the necessary tables (`users`, `saved_articles`, `content_cache`) in your production Postgres database.
+1.  **Update Start Command:**
+    *   Go to your Render Dashboard > Nook Backend > **Settings**.
+    *   Find the **Start Command**.
+    *   Change it to:
+        ```bash
+        python -m alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port $PORT
+        ```
+    *   Click **Save Changes**.
+
+2.  **Verify:**
+    *   Render will redeploy your service.
+    *   Check the **Logs** tab. You should see migration logs (e.g., `Running upgrade...`) before the "Application startup complete" message.
 
 ---
 
