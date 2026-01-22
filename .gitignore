@@ -1,0 +1,15 @@
+# Global ignores
+*.log
+*.db
+*.sqlite3
+*.bak
+
+# Debug artifacts
+debug_*.py
+debug_*.html
+dev_output.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
