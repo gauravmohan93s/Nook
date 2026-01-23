@@ -23,9 +23,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       return token
     },
     async session({ session, token }) {
-      // @ts-expect-error Extending session type with id_token
       session.id_token = token.id_token as string
-      // @ts-expect-error Extending session type with access_token
       session.access_token = token.access_token as string
       return session
     },
