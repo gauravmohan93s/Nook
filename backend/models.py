@@ -3,6 +3,9 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
 from datetime import datetime
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 Base = declarative_base()
 
@@ -12,6 +15,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True)
     tier = Column(String, default="seeker") # seeker (free), insider, patron
+    is_admin = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     saved_articles = relationship("SavedArticle", back_populates="user")
@@ -25,6 +29,9 @@ class SavedArticle(Base):
     url = Column(String)
     title = Column(String)
     summary = Column(String, nullable=True) # AI summary
+    thumbnail_url = Column(String, nullable=True)
+    author = Column(String, nullable=True)
+    published_at = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     user = relationship("User", back_populates="saved_articles")
@@ -35,6 +42,7 @@ class UsageLog(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
     date = Column(String) # Format YYYY-MM-DD
+    action = Column(String, default="unlock") # unlock, summarize, tts
     count = Column(Integer, default=0)
     
     user = relationship("User", back_populates="usage_logs")
@@ -51,6 +59,7 @@ class ContentCache(Base):
     license = Column(String, nullable=True)
     content_html = Column(String, nullable=True)
     content_text = Column(String, nullable=True)
+    summary = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

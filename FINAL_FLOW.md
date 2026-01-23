@@ -8,8 +8,9 @@ deployment. Keep it updated as production details evolve.
 1) User submits a URL in the Nook UI.
 2) Backend selects a source adapter (Medium, arXiv, PMC, or generic).
 3) Adapter fetches content, cleans it, normalizes it, and proxies images.
-4) Backend returns HTML + `source` + `license` to the UI.
-5) Optional: summarize, TTS, and save to library.
+4) Backend sanitizes HTML and validates URLs.
+5) Backend returns HTML + `source` + `license` to the UI.
+6) Optional: summarize, TTS, and save to library.
 
 ## Supported Sources (Current)
 
@@ -28,6 +29,11 @@ Backend (`Nook/backend/.env`):
 - `GEMINI_API_KEY` = optional, for summaries
 - `CACHE_TTL_SECONDS` = cache TTL for content (seconds)
 - `SEMANTIC_SCHOLAR_API_KEY` = Semantic Scholar API key
+- `ALLOWED_ORIGINS` = comma-separated list of frontend URLs
+- `ALLOW_PRIVATE_NETWORK` = allow private IP fetches (dev only)
+- `MAX_IMAGE_BYTES` = safety limit for proxied images
+- `ENABLE_LEGACY_TTS` = enable deprecated backend TTS
+- `LOG_LEVEL`, `LOG_FILE`, `LOG_MAX_BYTES`, `LOG_BACKUP_COUNT` = logging controls
 
 Frontend (`Nook/frontend/.env.local`):
 - `NEXT_PUBLIC_API_URL` = backend base URL

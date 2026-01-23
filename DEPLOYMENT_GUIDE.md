@@ -20,9 +20,14 @@ This guide walks you through deploying Nook (Frontend + Backend) with **Razorpay
 
 3.  **Google AI Studio (Summaries):**
     *   Get a free API Key for Gemini Pro/Flash.
+    *   If free tier quota for `gemini-2.0-flash` is 0, set `GEMINI_MODEL=gemini-2.5-flash`.
 
 4.  **Semantic Scholar (Research):**
     *   Request a free API key (optional, limits apply without it).
+
+5.  **Security Hygiene:**
+    *   Rotate any keys that were ever committed to git.
+    *   Keep all secrets only in deployment environment variables.
 
 ---
 
@@ -41,6 +46,12 @@ This guide walks you through deploying Nook (Frontend + Backend) with **Razorpay
     *   Add all variables from `Nook/backend/.env.example`.
     *   **DATABASE_URL:** For production, use the "Internal Database URL" from a Render PostgreSQL database (Create one in Dashboard > New > PostgreSQL).
     *   **API_BASE_URL:** The URL Render assigns you (e.g., `https://nook-backend.onrender.com`).
+    *   **ALLOWED_ORIGINS:** Your frontend URL(s), comma-separated.
+    *   **ALLOW_PRIVATE_NETWORK:** `false` in production.
+    *   **MAX_IMAGE_BYTES:** Safety cap for proxying images.
+    *   **LOG_LEVEL / LOG_FILE / LOG_MAX_BYTES / LOG_BACKUP_COUNT:** Logging controls.
+    *   **SENTRY_DSN / SENTRY_TRACES_SAMPLE_RATE / SENTRY_PROFILES_SAMPLE_RATE:** Error monitoring.
+    *   **RATE_LIMIT_UNLOCK_PER_MINUTE / RATE_LIMIT_SUMMARIZE_PER_MINUTE:** Basic rate limits.
 4.  **Deploy:** Click "Create Web Service".
 
 ---
@@ -58,6 +69,7 @@ This guide walks you through deploying Nook (Frontend + Backend) with **Razorpay
     *   `AUTH_GOOGLE_ID`: Same as Backend.
     *   `AUTH_GOOGLE_SECRET`: Same as Backend.
     *   `AUTH_SECRET`: Generate a random string (e.g., `openssl rand -base64 32`).
+    *   `NEXT_PUBLIC_SENTRY_DSN` / `SENTRY_DSN`: Frontend error monitoring.
 4.  **Deploy:** Click "Deploy".
 
 ---

@@ -1897,6 +1897,63 @@ async def get_library(
     
     return user.saved_articles
 
+import feedparser
+
+# --- Discover Endpoint ---
+
+class ArticlePreview(BaseModel):
+    title: str
+    url: str
+    source: str
+    summary: str = ""
+    published: str = ""
+
+@app.get("/api/discover")
+def get_discover_content():
+    # 1. Curated Featured (Static for now, can be DB driven later)
+    featured = [
+        ArticlePreview(
+            title="The Age of AI Agents", 
+            url="https://medium.com/failed-stork/the-age-of-ai-agents-7e6140502758",
+            source="Medium",
+            summary="A deep dive into how autonomous agents are reshaping software."
+        ),
+        ArticlePreview(
+            title="Attention Is All You Need", 
+            url="https://arxiv.org/abs/1706.03762",
+            source="Arxiv",
+            summary="The landmark paper that introduced the Transformer architecture."
+        )
+    ]
+
+    # 2. Dynamic RSS Feeds
+    rss_sources = [
+        {"name": "OpenAI Blog", "url": "https://openai.com/blog/rss.xml"},
+        {"name": "MIT Tech Review", "url": "https://www.technologyreview.com/feed/"},
+        {"name": "Google AI", "url": "https://blog.google/technology/ai/rss/"}
+    ]
+
+    latest = []
+    for source in rss_sources:
+        try:
+            feed = feedparser.parse(source["url"])
+            for entry in feed.entries[:2]: # Get top 2 from each
+                latest.append(ArticlePreview(
+                    title=entry.title,
+                    url=entry.link,
+                    source=source["name"],
+                    summary=entry.get("summary", "")[:150] + "...",
+                    published=entry.get("published", "")[:10]
+                ))
+        except Exception as e:
+            logger.warning(f"Failed to fetch RSS {source['name']}: {e}")
+            continue
+
+    return {
+        "featured": featured,
+        "latest": latest
+    }
+
 # --- Payments (Razorpay for India) ---
 
 class CreateOrderRequest(BaseModel):

@@ -7,5 +7,5 @@ export async function loginAction() {
 }
 
 export async function logoutAction() {
-  await signOut()
+  await signOut({ redirectTo: "/" })
 }

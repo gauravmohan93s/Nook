@@ -9,7 +9,8 @@ updated as sources and features evolve.
 2) Source detection
 3) Adapter fetch (raw HTML/PDF/metadata)
 4) Clean + normalize to common schema
-5) Cache + return to client
+5) Sanitize HTML + apply security checks
+6) Cache + return to client
 
 ## Adapter Interface (Conceptual)
 
@@ -70,6 +71,8 @@ Priority order:
 
 - If license == "unknown", allow content but label it clearly.
 - Never market paywall bypass as a primary feature.
+- Block unsafe/private network URLs at intake.
+- Sanitize HTML before caching/serving to prevent XSS.
 
 ## Environment
 
@@ -77,3 +80,7 @@ Priority order:
 - `DATABASE_URL`: SQLAlchemy database URL (SQLite local or Postgres in prod).
 - `CACHE_TTL_SECONDS`: Cache TTL for fetched content (seconds).
 - `SEMANTIC_SCHOLAR_API_KEY`: API key for Semantic Scholar.
+- `ALLOWED_ORIGINS`: Comma-separated list of frontend URLs for CORS.
+- `ALLOW_PRIVATE_NETWORK`: Allow private IP URL fetches (dev only).
+- `MAX_IMAGE_BYTES`: Safety limit for proxy images.
+- `LOG_LEVEL`, `LOG_FILE`, `LOG_MAX_BYTES`, `LOG_BACKUP_COUNT`: Logging controls.

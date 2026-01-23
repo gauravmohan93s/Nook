@@ -11,7 +11,11 @@ sqlalchemy
 psycopg2-binary
 alembic
 gTTS
-google-generativeai
+google-genai
 google-auth
+google-auth-oauthlib
 razorpay
 python-jose[cryptography]
+bleach
+sentry-sdk
+prometheus-client

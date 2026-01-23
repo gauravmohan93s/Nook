@@ -1,6 +1,19 @@
 import './globals.css';
 import Navbar from "@/components/Navbar";
 import { Providers } from "./providers";
+import { Fraunces, Space_Grotesk } from "next/font/google";
+
+const space = Space_Grotesk({
+  subsets: ["latin"],
+  variable: "--font-sans-family",
+  display: "swap",
+});
+
+const fraunces = Fraunces({
+  subsets: ["latin"],
+  variable: "--font-serif-family",
+  display: "swap",
+});
 
 export const metadata = {
   title: "Nook | Your Window to the Best Writing",
@@ -14,10 +27,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <head>
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
-      </head>
-      <body>
+      <body className={`${space.variable} ${fraunces.variable} antialiased`}>
         <Providers>
             <Navbar />
             {children}
