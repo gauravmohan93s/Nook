@@ -1008,7 +1008,11 @@ class MediumAdapter(BaseAdapter):
     async def fetch_html(self, client, url: str):
         tasks = []
         for mirror_host in MEDIUM_MIRRORS:
-            mirror_url = build_mirror_url(url, mirror_host)
+            if "freedium" in mirror_host:
+                # Freedium supports appending the full URL for custom domains
+                mirror_url = f"https://{mirror_host}/{url.replace('https://', '').replace('http://', '')}"
+            else:
+                mirror_url = build_mirror_url(url, mirror_host)
             tasks.append(fetch_clean_html(client, mirror_url))
         
         # Run all fetches concurrently
