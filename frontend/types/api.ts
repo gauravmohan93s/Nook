@@ -17,6 +17,7 @@ export interface User {
   image?: string;
   tier?: string;
   is_admin?: boolean;
+  created_at?: string;
 }
 
 export interface UsageLog {
