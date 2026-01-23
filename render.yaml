@@ -34,6 +34,8 @@ services:
           property: host
       - key: NODE_VERSION
         value: 20.11.0
+      - key: AUTH_TRUST_HOST
+        value: true
     plan: free
 
 databases:
