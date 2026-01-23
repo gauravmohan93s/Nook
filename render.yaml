@@ -2,7 +2,7 @@ services:
   - type: web
     name: nook-backend
     runtime: python
-    repo: https://github.com/GSakhare/Nook
+    repo: https://github.com/gauravmohan93s/Nook
     rootDir: backend
     buildCommand: pip install -r requirements.txt
     startCommand: python -m alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port $PORT
@@ -22,7 +22,7 @@ services:
   - type: web
     name: nook-frontend
     runtime: node
-    repo: https://github.com/GSakhare/Nook
+    repo: https://github.com/gauravmohan93s/Nook
     rootDir: frontend
     buildCommand: npm install && npm run build
     startCommand: npm start
