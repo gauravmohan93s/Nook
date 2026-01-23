@@ -113,7 +113,7 @@ export default function SettingsPage() {
                             <div className="p-6 bg-slate-50/50">
                                 <div className="flex gap-3">
                                     <Button 
-                                        variant="outline" 
+                                        variant="secondary" 
                                         onClick={() => signOut({ callbackUrl: '/' })}
                                         className="flex-1 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-100"
                                     >
@@ -122,7 +122,7 @@ export default function SettingsPage() {
                                     </Button>
                                     {me.is_admin && (
                                         <Button 
-                                            variant="outline"
+                                            variant="secondary"
                                             onClick={() => router.push('/admin')}
                                             className="flex-1"
                                         >
