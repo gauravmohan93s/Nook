@@ -1,5 +1,7 @@
 'use client';
 
+import { getApiUrl } from '@/utils/api';
+
 import { useEffect, useState } from 'react';
 import { useSession } from "next-auth/react";
 import { BookOpen, Clock } from "lucide-react";
@@ -9,7 +11,7 @@ export default function Library() {
   const { data: session, status } = useSession();
   const [articles, setArticles] = useState<Article[]>([]);
   const [fetching, setFetching] = useState(false);
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+  const apiUrl = getApiUrl();
 
   useEffect(() => {
     if (status === "loading") return;

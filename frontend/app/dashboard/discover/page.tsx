@@ -1,4 +1,6 @@
 'use client';
+
+import { getApiUrl } from '@/utils/api';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
@@ -24,7 +26,7 @@ export default function DiscoverPage() {
     const [url, setUrl] = useState('');
     const [data, setData] = useState<DiscoverData | null>(null);
     const [loading, setLoading] = useState(true);
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+    const apiUrl = getApiUrl();
 
     useEffect(() => {
         if (status === 'unauthenticated') {

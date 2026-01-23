@@ -1,5 +1,7 @@
 ﻿'use client';
 
+import { getApiUrl } from '@/utils/api';
+
 import { Check } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
@@ -31,7 +33,7 @@ export default function Pricing() {
   const { data: session } = useSession();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+  const apiUrl = getApiUrl();
 
   useEffect(() => {
     const script = document.createElement("script");

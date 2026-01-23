@@ -1,5 +1,7 @@
 'use client';
 
+import { getApiUrl } from '@/utils/api';
+
 import { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
@@ -15,7 +17,7 @@ export default function Dashboard() {
   const [savedArticles, setSavedArticles] = useState<Article[]>([]);
   const [fetchingLibrary, setFetchingLibrary] = useState(true);
   const [viewMode, setViewMode] = useState<'tile' | 'list'>('tile');
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+  const apiUrl = getApiUrl();
 
   const fetchLibrary = useCallback(async () => {
       setFetchingLibrary(true);

@@ -1,5 +1,7 @@
 'use client';
 
+import { getApiUrl } from '@/utils/api';
+
 import { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
@@ -32,7 +34,7 @@ export default function AdminDashboard() {
   const [cacheUrl, setCacheUrl] = useState('');
   const [cacheLoading, setCacheLoading] = useState(false);
   const [loading, setLoading] = useState(true);
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+  const apiUrl = getApiUrl();
 
   const fetchData = useCallback(async (headers: HeadersInit) => {
       // Fetch Stats

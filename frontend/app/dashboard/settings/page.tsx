@@ -1,4 +1,6 @@
 'use client';
+
+import { getApiUrl } from '@/utils/api';
 import { useRouter } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
 import { useEffect, useState } from 'react';
@@ -29,7 +31,7 @@ export default function SettingsPage() {
     const { data: session, status } = useSession();
     const [me, setMe] = useState<MeResponse | null>(null);
     const [loading, setLoading] = useState(true);
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+    const apiUrl = getApiUrl();
 
     useEffect(() => {
         if (status === 'loading') return;

@@ -1,5 +1,7 @@
 'use client';
 
+import { getApiUrl } from '@/utils/api';
+
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
@@ -31,7 +33,7 @@ function ReadContent() {
                     headers['Authorization'] = `Bearer ${session.id_token}`;
                 }
 
-                const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+                const apiUrl = getApiUrl();
                 const res = await fetch(`${apiUrl}/api/unlock`, {
                     method: 'POST',
                     headers,

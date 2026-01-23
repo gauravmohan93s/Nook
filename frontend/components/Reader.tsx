@@ -1,5 +1,7 @@
 'use client';
 
+import { getApiUrl } from '@/utils/api';
+
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { ChevronLeft, Sparkles, Bookmark, Pause, Play } from 'lucide-react';
@@ -37,7 +39,7 @@ export default function Reader({ html, meta, url, onBack }: ReaderProps) {
   const synthRef = useRef<SpeechSynthesis | null>(null);
   const aiTtsUrl = process.env.NEXT_PUBLIC_TTS_AI_URL;
   const legacyTtsEnabled = process.env.NEXT_PUBLIC_ENABLE_LEGACY_TTS === 'true';
-  const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+  const apiBaseUrl = getApiUrl();
 
   useEffect(() => {
       if (typeof window !== 'undefined') {

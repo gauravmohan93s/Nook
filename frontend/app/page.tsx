@@ -1,5 +1,7 @@
 ﻿'use client';
 
+import { getApiUrl } from '@/utils/api';
+
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, BookOpen, Shield, Zap, ArrowRight, Sparkles, Bookmark, Check, Headphones, GraduationCap, Crown } from 'lucide-react';
@@ -30,7 +32,7 @@ export default function Home() {
   const [articleHtml, setArticleHtml] = useState<string | null>(null);
   const [articleMeta, setArticleMeta] = useState<{ source?: string; license?: string; tags?: string[] } | null>(null);
   const [error, setError] = useState('');
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+  const apiUrl = getApiUrl();
 
   useEffect(() => {
     // Redirect logic disabled as per current requirements
