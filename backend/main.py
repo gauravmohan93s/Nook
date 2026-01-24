@@ -26,6 +26,7 @@ import html as html_lib
 import re
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 import markdown
+from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
 
 load_dotenv()
 
@@ -1387,8 +1388,152 @@ class GenericAdapter(BaseAdapter):
             return text
         return None
 
+class YoutubeAdapter(BaseAdapter):
+    name = "youtube"
+    license_type = "standard-license"
+
+    def can_handle(self, url: str) -> bool:
+        parsed = urlparse(url)
+        host = parsed.netloc.lower()
+        return "youtube.com" in host or "youtu.be" in host
+
+    def _get_video_id(self, url: str) -> str | None:
+        parsed = urlparse(url)
+        if "youtu.be" in parsed.netloc:
+            return parsed.path.strip("/")
+        if "youtube.com" in parsed.netloc:
+            if "v=" in parsed.query:
+                return parsed.query.split("v=")[1].split("&")[0]
+        return None
+
+    def _get_video_metadata(self, video_id: str) -> dict:
+        # We can't easily get metadata without YouTube Data API key (which entails quota/cost).
+        # However, we can use oEmbed which is free and public!
+        # https://www.youtube.com/oembed?url=http://www.youtube.com/watch?v=VIDEO_ID&format=json
+        try:
+            oembed_url = f"https://www.youtube.com/oembed?url=http://www.youtube.com/watch?v={video_id}&format=json"
+            import requests
+            resp = requests.get(oembed_url, timeout=5)
+            if resp.status_code == 200:
+                data = resp.json()
+                return {
+                    "title": data.get("title"),
+                    "author": data.get("author_name"),
+                    "thumbnail_url": data.get("thumbnail_url"),
+                    "author_url": data.get("author_url")
+                }
+        except Exception:
+            pass
+        return {}
+
+    async def fetch_html(self, client, url: str):
+        video_id = self._get_video_id(url)
+        if not video_id:
+            return None
+
+        try:
+            # Run blocking call in threadpool
+            loop = asyncio.get_event_loop()
+            transcript_list = await loop.run_in_executor(None, YouTubeTranscriptApi.list_transcripts, video_id)
+            
+            # Try to get English or auto-generated English
+            transcript = None
+            try:
+                transcript = transcript_list.find_transcript(['en']) 
+            except Exception:
+                try:
+                    transcript = transcript_list.find_generated_transcript(['en'])
+                except Exception:
+                    # Fallback to any available
+                    for t in transcript_list:
+                        transcript = t
+                        break
+            
+            if not transcript:
+                return None
+
+            full_transcript = await loop.run_in_executor(None, transcript.fetch)
+            
+            # Format as article
+            # Get metadata via oEmbed
+            meta = await loop.run_in_executor(None, self._get_video_metadata, video_id)
+            title = meta.get("title") or f"YouTube Video ({video_id})"
+            author = meta.get("author") or "YouTube Creator"
+            thumb = meta.get("thumbnail_url") or f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg"
+
+            # Create readable HTML text
+            # Group by 30 seconds paragraphs? Or just list items?
+            # Let's make it look like a script/article.
+            
+            html_parts = []
+            current_p = []
+            
+            # Simple grouping strategy: merge lines until ~300 chars or pause > 2s
+            last_end = 0.0
+            
+            for line in full_transcript:
+                text = line['text']
+                start = line['start']
+                duration = line['duration']
+                
+                # Check for "paragraph break" based on time gap (2s silence)
+                if start - last_end > 2.0 and current_p:
+                    html_parts.append(f"<p>{' '.join(current_p)}</p>")
+                    current_p = []
+
+                current_p.append(text)
+                last_end = start + duration
+                
+            if current_p:
+                html_parts.append(f"<p>{' '.join(current_p)}</p>")
+
+            body_html = "\n".join(html_parts)
+            
+            # Embed the video player at the top
+            player_html = f"""
+            <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%; border-radius: 12px; margin-bottom: 32px;">
+                <iframe src="https://www.youtube.com/embed/{video_id}" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;" frameborder="0" allowfullscreen></iframe>
+            </div>
+            """
+
+            safe_thumb = html_lib.escape(thumb or "none", quote=True)
+            safe_title = html_lib.escape(title, quote=True)
+            safe_author = html_lib.escape(author, quote=True)
+
+            return f"""
+            <div class="nook-container" data-thumbnail="{safe_thumb}" data-title="{safe_title}" data-author="{safe_author}" data-published="{date.today().isoformat()}">
+                <header style="margin-bottom: 24px;">
+                    <h1 class="nook-title">{title}</h1>
+                    <p class="nook-subtitle">Video Transcript</p>
+                </header>
+                {player_html}
+                <div class="nook-transcript">
+                    {body_html}
+                </div>
+            </div>
+            """
+
+        except (TranscriptsDisabled, NoTranscriptFound):
+            return None # Fallback to Jina/Generic?
+        except Exception as e:
+            logger.warning(f"YouTube transcript error: {e}")
+            return None
+
+    async def fetch_text(self, client, url: str):
+        # reuse fetch_html logic but strip tags?
+        # For efficiency, just fetch transcript text
+        video_id = self._get_video_id(url)
+        if not video_id: return None
+        try:
+             loop = asyncio.get_event_loop()
+             transcript = await loop.run_in_executor(None, YouTubeTranscriptApi.get_transcript, video_id)
+             return " ".join([t['text'] for t in transcript])
+        except Exception:
+            return None
+
 ADAPTERS = [
     MediumAdapter(),
+    YoutubeAdapter(), # Add YouTube
     ArxivAdapter(),
     PubMedCentralAdapter(),
     OpenAlexAdapter(),

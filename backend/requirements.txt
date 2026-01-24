@@ -20,3 +20,4 @@ bleach
 sentry-sdk
 prometheus-client
 markdown
+youtube-transcript-api
