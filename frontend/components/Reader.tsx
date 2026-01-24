@@ -11,6 +11,8 @@ import DOMPurify from 'dompurify';
 
 interface ReaderProps {
   html: string;
+  pdfUrl?: string; // New prop
+  contentType?: 'html' | 'pdf'; // New prop
   meta: { 
       source?: string; 
       license?: string;
@@ -24,7 +26,7 @@ interface ReaderProps {
   onBack: () => void;
 }
 
-export default function Reader({ html, meta, url, onBack }: ReaderProps) {
+export default function Reader({ html, pdfUrl, contentType = 'html', meta, url, onBack }: ReaderProps) {
   const { data: session } = useSession();
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [summary, setSummary] = useState('');
@@ -287,12 +289,14 @@ export default function Reader({ html, meta, url, onBack }: ReaderProps) {
       return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
   }, [html]);
 
+  const proxyPdfUrl = pdfUrl ? `${apiBaseUrl}/api/proxy_pdf?url=${encodeURIComponent(pdfUrl)}` : '';
+
   return (
     <div className="min-h-screen bg-slate-50 pb-24 font-serif">
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="max-w-3xl mx-auto px-6 py-12"
+        className="max-w-4xl mx-auto px-6 py-12"
       >
           <div className="flex items-center justify-between mb-8 pb-4 border-b border-slate-200">
               <Button 
@@ -315,10 +319,12 @@ export default function Reader({ html, meta, url, onBack }: ReaderProps) {
                               Sign in for features -&gt;
                           </div>
                       )}
-                      <Button variant={isPlaying ? "primary" : "secondary"} size="sm" onClick={handleListen} title="Listen">
-                          {isPlaying ? <Pause className="w-4 h-4 mr-2" /> : <Play className="w-4 h-4 mr-2" />}
-                          {isPlaying ? 'Stop' : 'Listen'}
-                      </Button>
+                      {contentType !== 'pdf' && (
+                          <Button variant={isPlaying ? "primary" : "secondary"} size="sm" onClick={handleListen} title="Listen">
+                              {isPlaying ? <Pause className="w-4 h-4 mr-2" /> : <Play className="w-4 h-4 mr-2" />}
+                              {isPlaying ? 'Stop' : 'Listen'}
+                          </Button>
+                      )}
                       <Button variant="secondary" size="sm" onClick={handleSummarize} disabled={isSummarizing}>
                           <Sparkles className="w-4 h-4 mr-2 text-indigo-500" />
                           {isSummarizing ? 'Thinking...' : 'Summarize'}
@@ -334,7 +340,7 @@ export default function Reader({ html, meta, url, onBack }: ReaderProps) {
           {/* Enhanced Metadata Header */}
           {meta && (
               <div className="mb-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                  {meta.thumbnail_url && (
+                  {meta.thumbnail_url && contentType !== 'pdf' && (
                       <div className="h-52 w-full overflow-hidden">
                           <img src={meta.thumbnail_url} alt="Cover" className="h-full w-full object-cover" />
                       </div>
@@ -381,11 +387,21 @@ export default function Reader({ html, meta, url, onBack }: ReaderProps) {
               </div>
           )}
           
-          <div 
-            id="nook-reader"
-            className="prose prose-lg prose-slate md:prose-xl max-w-none font-serif prose-headings:font-serif prose-headings:font-bold prose-p:text-slate-800 prose-a:text-indigo-700"
-            dangerouslySetInnerHTML={{ __html: safeHtml }}
-          />
+          {contentType === 'pdf' && proxyPdfUrl ? (
+             <div className="w-full h-[800px] border border-slate-200 rounded-xl overflow-hidden shadow-lg bg-slate-900">
+                  <iframe 
+                      src={proxyPdfUrl} 
+                      className="w-full h-full"
+                      title="PDF Reader"
+                  />
+             </div>
+          ) : (
+            <div 
+                id="nook-reader"
+                className="prose prose-lg prose-slate md:prose-xl max-w-none font-serif prose-headings:font-serif prose-headings:font-bold prose-p:text-slate-800 prose-a:text-indigo-700"
+                dangerouslySetInnerHTML={{ __html: safeHtml }}
+            />
+          )}
       </motion.div>
     </div>
   );

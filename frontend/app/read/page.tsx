@@ -16,7 +16,9 @@ function ReadContent() {
     
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [articleHtml, setArticleHtml] = useState<string | null>(null);
+    const [articleHtml, setArticleHtml] = useState<string>('');
+    const [pdfUrl, setPdfUrl] = useState<string | undefined>(undefined);
+    const [contentType, setContentType] = useState<'html' | 'pdf'>('html');
     const [articleMeta, setArticleMeta] = useState<{ source?: string; license?: string; tags?: string[] } | null>(null);
 
     useEffect(() => {
@@ -44,8 +46,10 @@ function ReadContent() {
                 if (!res.ok) {
                     throw new Error(data.detail || 'Failed to load article');
                 }
-                if (data.success && data.html) {
-                    setArticleHtml(data.html);
+                if (data.success) {
+                    setArticleHtml(data.html || '');
+                    setPdfUrl(data.pdf_url);
+                    setContentType(data.content_type || 'html');
                     setArticleMeta({ source: data.source, license: data.license, ...(data.metadata || {}) });
                 } else {
                     throw new Error('Invalid content');
@@ -73,8 +77,17 @@ function ReadContent() {
         </div>
     );
 
-    if (articleHtml && url) {
-        return <Reader html={articleHtml} meta={articleMeta} url={url} onBack={() => router.back()} />;
+    if (url) {
+        return (
+            <Reader 
+                html={articleHtml} 
+                pdfUrl={pdfUrl}
+                contentType={contentType}
+                meta={articleMeta} 
+                url={url} 
+                onBack={() => router.back()} 
+            />
+        );
     }
 
     return null;
