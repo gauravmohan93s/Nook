@@ -160,7 +160,9 @@ async def add_process_time_header(request: Request, call_next):
 def _parse_allowed_origins(value: str | None) -> list[str]:
     if not value:
         return ["http://localhost:3000"]
-    return [origin.strip() for origin in value.split(",") if origin.strip()]
+    # Split by comma, strip whitespace, and strip trailing slashes
+    origins = [origin.strip().rstrip("/") for origin in value.split(",") if origin.strip()]
+    return origins
 
 ALLOWED_ORIGINS = _parse_allowed_origins(os.getenv("ALLOWED_ORIGINS"))
 
