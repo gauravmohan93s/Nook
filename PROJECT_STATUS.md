@@ -93,9 +93,10 @@ This document details the current implementation of core workflows, business log
 ## 6. Deployment & Environment
 
 ### Infrastructure
-*   **Deployment**: **UPDATED.** Switched to a unified Render Blueprint (`render.yaml`).
-*   **Build System**: **UPDATED.** Frontend build uses `--legacy-peer-deps` to resolve Next.js 16 + Sentry conflicts.
-*   **Auth Security**: Added `AUTH_TRUST_HOST` and centralized protocol logic to fix OAuth flow on Render.
+*   **Architecture**: **UPDATED.** Split Architecture: Backend on Render, Frontend on Vercel, Database on Supabase.
+*   **Deployment**: Backend uses `render.yaml`. Frontend deploys via Vercel Git integration.
+*   **Build System**: Frontend build uses `--legacy-peer-deps`.
+*   **Auth Security**: `AUTH_TRUST_HOST` enabled. Google OAuth configured for Vercel domain.
 
 ### Environment Variables
 **Backend:**

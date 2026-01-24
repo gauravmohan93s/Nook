@@ -10,36 +10,9 @@ services:
       - key: PYTHON_VERSION
         value: 3.11.0
       - key: DATABASE_URL
-        fromDatabase:
-          name: nook-db
-          property: connectionString
+        sync: false
       - key: SECRET_KEY
         generateValue: true
       - key: ALLOWED_ORIGINS
-        value: https://nook-frontend.onrender.com,http://localhost:3000
-    plan: free
-
-  - type: web
-    name: nook-frontend
-    runtime: node
-    repo: https://github.com/gauravmohan93s/Nook
-    rootDir: frontend
-    buildCommand: npm install --legacy-peer-deps && npm run build
-    startCommand: npm start
-    envVars:
-      - key: NEXT_PUBLIC_API_URL
-        fromService:
-          type: web
-          name: nook-backend
-          property: host
-      - key: NODE_VERSION
-        value: 20.11.0
-      - key: AUTH_TRUST_HOST
-        value: true
-    plan: free
-
-databases:
-  - name: nook-db
-    databaseName: nook
-    user: nook_user
+        sync: false
     plan: free
