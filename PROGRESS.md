@@ -1,34 +1,18 @@
 # Nook Progress Log
 
-**Last Updated:** 21 January 2026
-
-## In Progress
-- Add Sentry + metrics dashboards (Grafana/hosted)
-- Fix frontend Tailwind resolution error in dev (module resolution/root path)
+**Last Updated:** 23 January 2026
 
 ## Recently Completed
-- Server-side HTML sanitization before cache/serve
-- URL safety checks for unlock/summarize/save/proxy
-- Shared HTTP client with timeouts/keep-alive
-- Request ID logging with rotation
-- DOM sanitization in the reader
-- Removed local `.env` files from repo (rotate keys now)
-- Metadata now flows to reader UI (backend `metadata` wired to frontend)
-- Image proxying now strips scheme for Weserv compatibility
-- Tiered Gemini model routing by subscription tier
-- Gemini retry/fallback logic improved
-- Added Sentry hooks (backend + frontend) and `/metrics` endpoint
-- Added basic rate limiting for unlock/summarize
-- Frontend visual refresh (typography + palette + landing, dashboard, reader polish)
-- Listener fallback flow: AI → legacy → browser-native
-- Summarize UI error handling improvements
-- External summary provider integration (optional env-based fallback)
-- Multi-provider summary fallback: Gemini → OpenRouter → Groq → Qubrid
-- Added `/api/me` for account + usage info
-- Reader listen fallback: AI → legacy → browser-native (with login token checks)
-- Reworked landing, dashboard, reader, library, settings, discover UI with indigo palette + new layout
-- Admin cache tools (list + flush URL)
-- Freedium metadata + tags + inline image preservation
+- **Unified Deployment**: Implemented `render.yaml` for full-stack Render Blueprint deployment.
+- **Discover Page**: Created dynamic discover section with curated reads and RSS tech news.
+- **Settings Refresh**: Redesigned settings with usage visualizers and account management.
+- **Centralized API Logic**: Moved API URL handling to `frontend/utils/api.ts` to solve Render `host` vs `url` issues.
+- **Custom Domain Support**: Fixed `MediumAdapter` to handle custom domains via Freedium prefix.
+- **Frontend Build Fix**: Used `--legacy-peer-deps` to resolve Sentry/Next.js 16 version conflicts.
+- **Migration Fix**: Patched migration 7ab94e5 to ignore non-existent index drops on production.
+- **Type Safety**: Fixed `User` interface missing `created_at` and `Button` variant type errors.
+- **Auth Hardening**: Added `AUTH_TRUST_HOST` to handle Render proxy headers.
+
 
 ## Verification (22 January 2026)
 - **Critical Fix:** Disabled `reactCompiler` in Next.js to resolve frontend build OOM/hangs.

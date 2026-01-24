@@ -1,7 +1,7 @@
 # Nook Project Status & System Documentation
 
-**Date:** 21 January 2026
-**Version:** Beta 1.3 (In Progress)
+**Date:** 23 January 2026
+**Version:** Beta 1.4
 
 This document details the current implementation of core workflows, business logic, and file handling for the Nook application. It serves as the source of truth for the current status and deployment.
 
@@ -10,6 +10,8 @@ This document details the current implementation of core workflows, business log
 ## 1. Core Workflow: Unlock & Read
 
 ### Current Status (Working)
+*   **Custom Domains**: **UPDATED.** Now supports Medium custom domains (e.g., `plainenglish.io`) by using the Freedium prefix strategy in the `MediumAdapter`.
+*   **API Configuration**: **UPDATED.** Centralized API URL handling in `frontend/utils/api.ts` to ensure consistent `https://` protocols and protocol-relative handling.
 *   **Architecture**: Adapter Pattern (Medium, Arxiv, PMC, OpenAlex, Semantic Scholar).
 *   **Image Handling**: **UPDATED.** Now uses `images.weserv.nl` as a CDN proxy to bypass Medium's CORs/hotlinking protection. Local proxy (`/api/proxy_image`) is deprecated/fallback.
 *   **Metadata**: **UPDATED.** Backend now parses `h1`, `meta` tags, and fallbacks (e.g., "Title | by Author") for `title`/`author`. Thumbnail is extracted from og:image, a stored data-thumbnail, or the first image in the article.
@@ -25,6 +27,9 @@ This document details the current implementation of core workflows, business log
 ---
 
 ## 2. Intelligence Features (AI & TTS)
+
+### Discover & Personalization
+*   **Discover Section**: **UPDATED.** Features a dynamic Discover page fetching curated featured reads and real-time AI/Tech news from RSS feeds (OpenAI, MIT, Google AI).
 
 ### AI Summary
 *   **Provider**: **Google Gemini (google-genai SDK)**.
@@ -86,6 +91,11 @@ This document details the current implementation of core workflows, business log
 ---
 
 ## 6. Deployment & Environment
+
+### Infrastructure
+*   **Deployment**: **UPDATED.** Switched to a unified Render Blueprint (`render.yaml`).
+*   **Build System**: **UPDATED.** Frontend build uses `--legacy-peer-deps` to resolve Next.js 16 + Sentry conflicts.
+*   **Auth Security**: Added `AUTH_TRUST_HOST` and centralized protocol logic to fix OAuth flow on Render.
 
 ### Environment Variables
 **Backend:**
