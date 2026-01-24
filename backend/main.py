@@ -99,10 +99,20 @@ REQUEST_LATENCY = Histogram(
 )
 
 # Shared HTTP client for efficiency
-HTTP_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
+HTTP_TIMEOUT = httpx.Timeout(15.0, connect=5.0) # Increased timeout
 HTTP_LIMITS = httpx.Limits(max_keepalive_connections=20, max_connections=100)
 DEFAULT_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Cache-Control": "max-age=0",
 }
 
 @app.on_event("startup")
@@ -110,7 +120,8 @@ async def startup_event():
     app.state.http = httpx.AsyncClient(
         timeout=HTTP_TIMEOUT,
         limits=HTTP_LIMITS,
-        follow_redirects=True
+        follow_redirects=True,
+        headers=DEFAULT_HEADERS
     )
 
 @app.on_event("shutdown")
@@ -931,18 +942,18 @@ def build_mirror_url(original_url: str, mirror_host: str) -> str:
     parsed = urlparse(original_url)
     return urlunparse(parsed._replace(netloc=mirror_host, scheme="https"))
 
-async def _fetch_text_limited(client, url: str, max_bytes: int = 5_000_000) -> str | None:
+async def _fetch_text_limited(client, url: str, max_bytes: int = 5_000_000) -> tuple[str | None, int]:
     try:
-        req = client.build_request("GET", url, headers=DEFAULT_HEADERS)
+        req = client.build_request("GET", url)
         r = await client.send(req, stream=True)
         if r.status_code != 200:
             await r.aclose()
-            return None
+            return None, r.status_code
             
         content_length = r.headers.get("content-length")
         if content_length and int(content_length) > max_bytes:
             await r.aclose()
-            return None
+            return None, 413 # Payload Too Large
             
         content = []
         downloaded = 0
@@ -951,7 +962,7 @@ async def _fetch_text_limited(client, url: str, max_bytes: int = 5_000_000) -> s
             downloaded += len(chunk)
             if downloaded > max_bytes:
                 await r.aclose()
-                return None
+                return None, 413
             content.append(chunk)
             
         await r.aclose()
@@ -959,19 +970,21 @@ async def _fetch_text_limited(client, url: str, max_bytes: int = 5_000_000) -> s
         full_bytes = b"".join(content)
         # Simple decoding strategy
         try:
-             return full_bytes.decode("utf-8")
+             return full_bytes.decode("utf-8"), 200
         except UnicodeDecodeError:
-             return full_bytes.decode("latin-1", errors="replace")
+             return full_bytes.decode("latin-1", errors="replace"), 200
     except Exception as e:
         logger.warning(f"Fetch error for {url}: {e}")
-        return None
+        return None, 500
 
 async def fetch_clean_html(client, mirror_url: str):
-    text = await _fetch_text_limited(client, mirror_url)
+    text, status = await _fetch_text_limited(client, mirror_url)
     if not text:
+        logger.warning(f"Fetch failed for {mirror_url} with status {status}")
         return None
         
     if "Failed to render" in text or "This site can't be reached" in text:
+        logger.warning(f"Mirror {mirror_url} returned error text")
         return None
         
     thumb = _extract_thumbnail_from_raw(text, mirror_url)
@@ -980,7 +993,8 @@ async def fetch_clean_html(client, mirror_url: str):
 # ... (Update adapters to handle tuple return) ...
 
 async def fetch_raw_html(client, mirror_url: str):
-    return await _fetch_text_limited(client, mirror_url)
+    text, status = await _fetch_text_limited(client, mirror_url)
+    return text
 
 class BaseAdapter:
     name = "base"
@@ -1040,15 +1054,17 @@ class MediumAdapter(BaseAdapter):
         tasks = []
         for mirror_host in MEDIUM_MIRRORS:
             mirror_url = build_mirror_url(url, mirror_host)
-            tasks.append(fetch_raw_html(client, mirror_url))
+            tasks.append(_fetch_text_limited(client, mirror_url))
             
         results = await asyncio.gather(*tasks, return_exceptions=True)
         
-        for raw_html in results:
-            if isinstance(raw_html, str) and raw_html:
-                text = extract_text_from_html(raw_html)
-                if len(text) > 500:
-                    return text
+        for res in results:
+            if isinstance(res, tuple):
+                raw_html, status = res
+                if raw_html and status == 200:
+                    text = extract_text_from_html(raw_html)
+                    if len(text) > 500:
+                        return text
         return None
 
 class ArxivAdapter(BaseAdapter):
@@ -1060,14 +1076,14 @@ class ArxivAdapter(BaseAdapter):
         return host == "arxiv.org" or host == "www.arxiv.org"
 
     async def fetch_html(self, client, url: str):
-        raw_html = await fetch_raw_html(client, url)
+        raw_html, status = await _fetch_text_limited(client, url)
         if not raw_html:
             return None
         thumb = _extract_thumbnail_from_raw(raw_html, url)
         return clean_html(raw_html, url, thumbnail_override=thumb)
 
     async def fetch_text(self, client, url: str):
-        raw_html = await fetch_raw_html(client, url)
+        raw_html, status = await _fetch_text_limited(client, url)
         if not raw_html:
             return None
         text = extract_text_from_html(raw_html)
@@ -1086,7 +1102,7 @@ class PubMedCentralAdapter(BaseAdapter):
     async def fetch_html(self, client, url: str):
         if "/pmc/articles/" not in url:
             return None
-        raw_html = await fetch_raw_html(client, url)
+        raw_html, status = await _fetch_text_limited(client, url)
         if not raw_html:
             return None
         return clean_html(raw_html, url)
@@ -1094,7 +1110,7 @@ class PubMedCentralAdapter(BaseAdapter):
     async def fetch_text(self, client, url: str):
         if "/pmc/articles/" not in url:
             return None
-        raw_html = await fetch_raw_html(client, url)
+        raw_html, status = await _fetch_text_limited(client, url)
         if not raw_html:
             return None
         text = extract_text_from_html(raw_html)
@@ -1300,13 +1316,13 @@ class GenericAdapter(BaseAdapter):
         return True
 
     async def fetch_html(self, client, url: str):
-        raw_html = await fetch_raw_html(client, url)
+        raw_html, status = await _fetch_text_limited(client, url)
         if not raw_html:
             return None
         return clean_html(raw_html, url)
 
     async def fetch_text(self, client, url: str):
-        raw_html = await fetch_raw_html(client, url)
+        raw_html, status = await _fetch_text_limited(client, url)
         if not raw_html:
             return None
         text = extract_text_from_html(raw_html)
