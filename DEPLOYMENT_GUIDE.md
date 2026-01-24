@@ -68,8 +68,26 @@ To fix the "Dangerous Site" or "Auth Error" issues:
     *   `http://localhost:3000/api/auth/callback/google`
 5.  **Save.**
 
-## Phase 5: Final Checks
+## Phase 5: Verification & Checks
 
-1.  **Migrations:** Render backend should have run `alembic upgrade head` automatically on start. Check the logs.
-2.  **Connectivity:** Open your Vercel URL. Try to login. If it works, Auth is configured correctly.
-3.  **Unlock:** Try to unlock a Medium article.
+### 1. Backend Health Check
+*   Open your Render Backend URL in a browser: `https://nook-backend.onrender.com/api/health`.
+*   **Expected:** `{"status":"ok","db":"ok"}`.
+*   **If it fails:** Check Render logs for database connection errors.
+
+### 2. Frontend Login
+*   Open your Vercel URL.
+*   Click **Sign In** and complete the Google Login flow.
+*   **Expected:** Redirect back to Dashboard/Home as a logged-in user.
+*   **If it fails:** Verify `AUTH_TRUST_HOST` is true in Vercel and Redirect URIs match in Google Cloud.
+
+### 3. Unlock Test (The "Real" Test)
+*   Try to unlock a Medium article URL.
+*   **Success:** You see the article content.
+*   **Verification:** Check Render logs (`Logs` tab).
+    *   **Normal:** `INFO: ... Unlock success with medium`
+    *   **Fallback:** `INFO: ... Unlock success with jina` (This means primary blocked, fallback worked).
+
+### 4. Database Migrations
+*   When Render starts, it runs `alembic upgrade head`.
+*   Check the top of the logs for `Running upgrade...` to ensure your Supabase DB schemas are up to date.
