@@ -588,6 +588,58 @@ async def proxy_image(url: str, referer: str = None):
         logger.error(f"Image proxy error: {e} for {url}")
         raise HTTPException(status_code=404, detail="Image not available")
 
+@app.get("/api/proxy_pdf")
+async def proxy_pdf(url: str):
+    if not url:
+        raise HTTPException(status_code=400, detail="Missing URL")
+    if not is_safe_url(url):
+        raise HTTPException(status_code=400, detail="URL not allowed.")
+
+    client = app.state.http
+    try:
+        # Some PDF hosts need headers
+        headers = {
+            "User-Agent": DEFAULT_HEADERS["User-Agent"],
+            "Referer": "https://www.google.com/", 
+        }
+
+        req = client.build_request("GET", url, headers=headers)
+        r = await client.send(req, stream=True)
+
+        if r.status_code != 200:
+            await r.aclose()
+            raise HTTPException(status_code=404, detail="PDF not found")
+
+        content_type = r.headers.get("content-type", "application/pdf")
+        
+        # Limit PDF size? Maybe 50MB.
+        MAX_PDF_BYTES = 50 * 1024 * 1024 
+        
+        async def stream_pdf():
+            downloaded = 0
+            try:
+                async for chunk in r.aiter_bytes():
+                    downloaded += len(chunk)
+                    if downloaded > MAX_PDF_BYTES:
+                        # We can't easily raise HTTP exception inside stream, 
+                        # so we just stop.
+                        break 
+                    yield chunk
+            finally:
+                await r.aclose()
+
+        return StreamingResponse(
+            stream_pdf(), 
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": "inline; filename=document.pdf",
+                "Cache-Control": "public, max-age=86400"
+            }
+        )
+    except Exception as e:
+        logger.error(f"PDF proxy error: {e} for {url}")
+        raise HTTPException(status_code=502, detail="Failed to fetch PDF")
+
 @app.get("/api/health")
 async def health_check(db: Session = Depends(get_db)):
     try:
@@ -1434,26 +1486,38 @@ class YoutubeAdapter(BaseAdapter):
         try:
             # Run blocking call in threadpool
             loop = asyncio.get_event_loop()
-            transcript_list = await loop.run_in_executor(None, YouTubeTranscriptApi.list_transcripts, video_id)
+            full_transcript = None
             
-            # Try to get English or auto-generated English
-            transcript = None
+            # Method 1: Try list_transcripts (Advanced)
             try:
-                transcript = transcript_list.find_transcript(['en']) 
-            except Exception:
+                transcript_list = await loop.run_in_executor(None, YouTubeTranscriptApi.list_transcripts, video_id)
+                # Try to get English or auto-generated English
+                transcript = None
                 try:
-                    transcript = transcript_list.find_generated_transcript(['en'])
+                    transcript = transcript_list.find_transcript(['en']) 
                 except Exception:
-                    # Fallback to any available
-                    for t in transcript_list:
-                        transcript = t
-                        break
+                    try:
+                        transcript = transcript_list.find_generated_transcript(['en'])
+                    except Exception:
+                        # Fallback to any available
+                        for t in transcript_list:
+                            transcript = t
+                            break
+                if transcript:
+                    full_transcript = await loop.run_in_executor(None, transcript.fetch)
+            except Exception as e:
+                logger.warning(f"YouTube list_transcripts failed ({e}), trying fallback...")
             
-            if not transcript:
+            # Method 2: Try get_transcript (Simple Fallback)
+            if not full_transcript:
+                try:
+                    full_transcript = await loop.run_in_executor(None, YouTubeTranscriptApi.get_transcript, video_id)
+                except Exception as e2:
+                    logger.warning(f"YouTube get_transcript fallback failed: {e2}")
+            
+            if not full_transcript:
                 return None
 
-            full_transcript = await loop.run_in_executor(None, transcript.fetch)
-            
             # Format as article
             # Get metadata via oEmbed
             meta = await loop.run_in_executor(None, self._get_video_metadata, video_id)
@@ -1531,13 +1595,73 @@ class YoutubeAdapter(BaseAdapter):
         except Exception:
             return None
 
+class AnnasAdapter(BaseAdapter):
+    name = "annas"
+    license_type = "copyrighted"
+
+    def can_handle(self, url: str) -> bool:
+        return "annas-archive.org/md5/" in url
+
+    async def fetch_html(self, client, url: str):
+        # 1. Fetch detail page
+        headers = {"User-Agent": DEFAULT_HEADERS["User-Agent"]}
+        resp = await client.get(url, headers=headers)
+        if resp.status_code != 200:
+            return None
+        
+        soup = BeautifulSoup(resp.text, "html.parser")
+        
+        # 2. Find download links
+        # Anna's usually has a list of "Slow partner server" links.
+        # We look for library.lol or libgen.li as they are easiest to parse.
+        
+        download_url = None
+        
+        for link in soup.find_all("a", href=True):
+            href = link["href"]
+            if "library.lol" in href or "libgen.li" in href:
+                # 3. Visit the Libgen page to get the real PDF link
+                try:
+                    lr = await client.get(href, headers=headers)
+                    if lr.status_code == 200:
+                        lsoup = BeautifulSoup(lr.text, "html.parser")
+                        # Libgen usually has a link with text "GET" or "Cloudflare"
+                        get_link = lsoup.find("a", string="GET") or lsoup.find("a", string="Cloudflare")
+                        if get_link and get_link.get("href"):
+                            download_url = get_link["href"]
+                            break
+                except Exception:
+                    continue
+        
+        if download_url:
+            # Metadata extraction from Anna's page
+            title = "Unknown Book"
+            h1 = soup.find("h1")
+            if h1: title = h1.get_text(strip=True)
+            
+            author = "Unknown Author"
+            # It's hard to parse structured metadata, let's just use what we have
+            
+            return {
+                "type": "pdf",
+                "url": download_url,
+                "title": title,
+                "author": author
+            }
+            
+        return None
+
+    async def fetch_text(self, client, url: str):
+        return None
+
 ADAPTERS = [
     MediumAdapter(),
-    YoutubeAdapter(), # Add YouTube
+    YoutubeAdapter(),
     ArxivAdapter(),
     PubMedCentralAdapter(),
     OpenAlexAdapter(),
     SemanticScholarAdapter(),
+    AnnasAdapter(),
 ]
 FALLBACK_ADAPTERS = [
     GenericAdapter(),
@@ -1641,7 +1765,27 @@ async def unlock_article(
             logger.info(f"Attempting unlock with adapter: {adapter.name}")
             content = await adapter.fetch_html(client, request.url)
             
-            if content:
+            # Handle PDF/Special Content (Dict Return)
+            if isinstance(content, dict) and content.get("type") == "pdf":
+                 logger.info(f"Unlock success (PDF) with {adapter.name}")
+                 return {
+                    "success": True,
+                    "html": "", # No HTML for PDF
+                    "content_type": "pdf",
+                    "pdf_url": content.get("url"),
+                    "source": adapter.name,
+                    "license": adapter.license_type,
+                    "remaining_reads": get_remaining_usage(user, db, "unlock") if user else 0,
+                    "metadata": {
+                        "title": content.get("title", "Untitled"),
+                        "author": content.get("author", "Unknown"),
+                        "thumbnail_url": content.get("thumbnail_url"),
+                        "published_at": None,
+                        "tags": []
+                    }
+                 }
+
+            if content and isinstance(content, str):
                 logger.info(f"Unlock success with {adapter.name}")
                 safe_html = sanitize_html(content)
                 meta = extract_metadata(safe_html)
@@ -1667,6 +1811,7 @@ async def unlock_article(
                 return {
                     "success": True,
                     "html": safe_html,
+                    "content_type": "html",
                     "source": adapter.name,
                     "license": adapter.license_type,
                     "remaining_reads": get_remaining_usage(user, db, "unlock") if user else 0,
@@ -2194,6 +2339,81 @@ def get_discover_content():
 
 class CreateOrderRequest(BaseModel):
     plan_id: str # 'scholar' or 'insider'
+
+@app.get("/api/search")
+async def search_content(q: str):
+    if not q:
+        raise HTTPException(status_code=400, detail="Missing query")
+
+    # Anna's Archive Mirrors
+    mirrors = [
+        "https://annas-archive.org",
+        "https://annas-archive.li",
+        "https://annas-archive.se",
+        "https://annas-archive.gs",
+    ]
+    
+    client = app.state.http
+    headers = {
+        "User-Agent": DEFAULT_HEADERS["User-Agent"],
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+
+    for base_url in mirrors:
+        search_url = f"{base_url}/search?q={quote(q)}"
+        try:
+            r = await client.get(search_url, headers=headers)
+            if r.status_code == 200:
+                # Success! Parse this one.
+                soup = BeautifulSoup(r.text, "html.parser")
+                results = []
+                seen_md5s = set()
+                
+                # Parsing logic (Generic for Anna's)
+                for link in soup.find_all("a", href=True):
+                    href = link["href"]
+                    if "/md5/" in href:
+                        md5 = href.split("/md5/")[1].split("?")[0]
+                        if md5 in seen_md5s:
+                            continue
+                        seen_md5s.add(md5)
+                        
+                        text_content = link.get_text(separator="|", strip=True).split("|")
+                        text_content = [t for t in text_content if t]
+                        
+                        if not text_content: 
+                            continue
+                            
+                        title = text_content[0]
+                        author = "Unknown"
+                        if len(text_content) > 1:
+                            author = text_content[1]
+                        
+                        thumb = None
+                        img = link.find("img")
+                        if img and img.get("src"):
+                            thumb = img["src"]
+                        
+                        results.append({
+                            "title": title,
+                            "author": author,
+                            "url": f"{base_url}{href}", # Use the working mirror base_url
+                            "source": "Anna's Archive",
+                            "thumbnail_url": thumb,
+                            "is_pdf": True
+                        })
+                        
+                        if len(results) >= 10:
+                            break
+                
+                return {"results": results}
+            
+        except Exception as e:
+            logger.warning(f"Anna's search failed on {base_url}: {e}")
+            continue
+
+    logger.error("All Anna's Archive mirrors failed.")
+    return {"results": []}
 
 @app.post("/api/create-order")
 async def create_order(
