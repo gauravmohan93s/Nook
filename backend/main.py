@@ -5,7 +5,7 @@ from pydantic import BaseModel
 import httpx
 import asyncio
 from bs4 import BeautifulSoup
-from urllib.parse import urljoin, urlparse, urlunparse, quote
+from urllib.parse import urljoin, urlparse, urlunparse, quote, parse_qs
 from readability import Document
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -1488,9 +1488,12 @@ class YoutubeAdapter(BaseAdapter):
             loop = asyncio.get_event_loop()
             full_transcript = None
             
-            # Method 1: Try list_transcripts (Advanced)
+            # Method 1: Try list (Advanced)
             try:
-                transcript_list = await loop.run_in_executor(None, YouTubeTranscriptApi.list_transcripts, video_id)
+                # Based on local environment, the methods are 'list' and 'fetch'
+                # list_transcripts -> list
+                # get_transcript -> fetch
+                transcript_list = await loop.run_in_executor(None, YouTubeTranscriptApi.list, video_id)
                 # Try to get English or auto-generated English
                 transcript = None
                 try:
@@ -1506,14 +1509,14 @@ class YoutubeAdapter(BaseAdapter):
                 if transcript:
                     full_transcript = await loop.run_in_executor(None, transcript.fetch)
             except Exception as e:
-                logger.warning(f"YouTube list_transcripts failed ({e}), trying fallback...")
+                logger.warning(f"YouTube list failed ({e}), trying fallback...")
             
-            # Method 2: Try get_transcript (Simple Fallback)
+            # Method 2: Try fetch (Simple Fallback)
             if not full_transcript:
                 try:
-                    full_transcript = await loop.run_in_executor(None, YouTubeTranscriptApi.get_transcript, video_id)
+                    full_transcript = await loop.run_in_executor(None, YouTubeTranscriptApi.fetch, video_id)
                 except Exception as e2:
-                    logger.warning(f"YouTube get_transcript fallback failed: {e2}")
+                    logger.warning(f"YouTube fetch fallback failed: {e2}")
             
             if not full_transcript:
                 return None
@@ -1577,8 +1580,39 @@ class YoutubeAdapter(BaseAdapter):
             </div>
             """
 
-        except (TranscriptsDisabled, NoTranscriptFound):
-            return None # Fallback to Jina/Generic?
+        except (TranscriptsDisabled, NoTranscriptFound) as e:
+            logger.warning(f"YouTube transcript unavailable: {e}")
+            # Fallback: Return video embed without transcript
+            # We need to fetch metadata again if we didn't get it
+            try:
+                meta = await loop.run_in_executor(None, self._get_video_metadata, video_id)
+                title = meta.get("title") or f"YouTube Video ({video_id})"
+                author = meta.get("author") or "YouTube Creator"
+                thumb = meta.get("thumbnail_url") or f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg"
+                
+                safe_thumb = html_lib.escape(thumb or "none", quote=True)
+                safe_title = html_lib.escape(title, quote=True)
+                safe_author = html_lib.escape(author, quote=True)
+                
+                player_html = f"""
+                <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%; border-radius: 12px; margin-bottom: 32px;">
+                    <iframe src="https://www.youtube.com/embed/{video_id}" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;" frameborder="0" allowfullscreen></iframe>
+                </div>
+                """
+                
+                return f"""
+                <div class="nook-container" data-thumbnail="{safe_thumb}" data-title="{safe_title}" data-author="{safe_author}" data-published="{date.today().isoformat()}">
+                    <header style="margin-bottom: 24px;">
+                        <h1 class="nook-title">{title}</h1>
+                        <p class="nook-subtitle">Video Only (Transcript Unavailable)</p>
+                    </header>
+                    {player_html}
+                    <p><em>Transcript could not be auto-generated for this video. You can still watch it above.</em></p>
+                </div>
+                """
+            except Exception:
+                return None
+
         except Exception as e:
             logger.warning(f"YouTube transcript error: {e}")
             return None
@@ -1600,55 +1634,137 @@ class AnnasAdapter(BaseAdapter):
     license_type = "copyrighted"
 
     def can_handle(self, url: str) -> bool:
-        return "annas-archive.org/md5/" in url
+        return "annas-archive" in url or "libgen" in url
 
     async def fetch_html(self, client, url: str):
-        # 1. Fetch detail page
         headers = {"User-Agent": DEFAULT_HEADERS["User-Agent"]}
-        resp = await client.get(url, headers=headers)
-        if resp.status_code != 200:
-            return None
         
-        soup = BeautifulSoup(resp.text, "html.parser")
-        
-        # 2. Find download links
-        # Anna's usually has a list of "Slow partner server" links.
-        # We look for library.lol or libgen.li as they are easiest to parse.
-        
-        download_url = None
-        
-        for link in soup.find_all("a", href=True):
-            href = link["href"]
-            if "library.lol" in href or "libgen.li" in href:
-                # 3. Visit the Libgen page to get the real PDF link
+        # Scenario A: Libgen Search URL (From OpenLibrary fallback)
+        if "search.php" in url:
+            # Extract query from URL
+            parsed = urlparse(url)
+            query_params = parse_qs(parsed.query)
+            req = query_params.get("req", [""])[0]
+            
+            if not req: return None
+            
+            # Try mirrors
+            libgen_mirrors = [
+                "https://libgen.is",
+                "https://libgen.rs",
+                "https://libgen.li",
+                "https://libgen.st",
+            ]
+            
+            for base in libgen_mirrors:
                 try:
-                    lr = await client.get(href, headers=headers)
-                    if lr.status_code == 200:
-                        lsoup = BeautifulSoup(lr.text, "html.parser")
-                        # Libgen usually has a link with text "GET" or "Cloudflare"
-                        get_link = lsoup.find("a", string="GET") or lsoup.find("a", string="Cloudflare")
-                        if get_link and get_link.get("href"):
-                            download_url = get_link["href"]
-                            break
+                    search_url = f"{base}/search.php?req={quote(req)}&open=0&res=25&view=simple&phrase=1&column=def"
+                    resp = await client.get(search_url, headers=headers, timeout=10.0)
+                    if resp.status_code == 200:
+                        soup = BeautifulSoup(resp.text, "html.parser")
+                        
+                        # Parsing logic
+                        tables = soup.find_all("table")
+                        target_table = None
+                        for t in tables:
+                            if len(t.find_all("tr")) > 5:
+                                target_table = t
+                                break
+                        if not target_table and tables:
+                             target_table = max(tables, key=lambda t: len(t.find_all("tr")))
+                        
+                        if target_table:
+                            rows = target_table.find_all("tr")[1:]
+                            for row in rows:
+                                cols = row.find_all("td")
+                                if len(cols) < 9: continue
+                                
+                                ext = cols[8].get_text(strip=True).lower()
+                                if ext != "pdf": continue
+                                
+                                title_col = cols[2]
+                                title_link = title_col.find("a", href=True)
+                                if title_link:
+                                    detail_rel = title_link["href"]
+                                    if detail_rel.startswith("book/index.php"):
+                                         detail_url = f"{base}/{detail_rel}"
+                                    else:
+                                         detail_url = urljoin(base, detail_rel)
+                                    
+                                    # Found a detail page! Fetch it.
+                                    res = await self._fetch_libgen_detail(client, detail_url)
+                                    if res: return res
                 except Exception:
                     continue
-        
-        if download_url:
-            # Metadata extraction from Anna's page
-            title = "Unknown Book"
-            h1 = soup.find("h1")
-            if h1: title = h1.get_text(strip=True)
+            return None
+
+        # Scenario B: Direct Libgen Detail URL
+        if "libgen" in url and "book/index.php" in url:
+             # Try to replace host if it fails? For now just try direct.
+             return await self._fetch_libgen_detail(client, url)
+
+        # Scenario C: Anna's Archive URL
+        return await self._fetch_annas_detail(client, url)
+
+    async def _fetch_libgen_detail(self, client, url: str):
+        try:
+            headers = {"User-Agent": DEFAULT_HEADERS["User-Agent"]}
+            resp = await client.get(url, headers=headers)
+            if resp.status_code != 200: return None
+            soup = BeautifulSoup(resp.text, "html.parser")
             
-            author = "Unknown Author"
-            # It's hard to parse structured metadata, let's just use what we have
+            get_link = soup.find("a", string="GET") or soup.find("a", string="Cloudflare")
+            if get_link and get_link.get("href"):
+                download_url = get_link["href"]
+                
+                title = "Unknown Book"
+                h1 = soup.find("h1")
+                if h1: title = h1.get_text(strip=True)
+                
+                return {
+                    "type": "pdf",
+                    "url": download_url,
+                    "title": title,
+                    "author": "Unknown"
+                }
+        except Exception:
+            pass
+        return None
+
+    async def _fetch_annas_detail(self, client, url: str):
+        try:
+            headers = {"User-Agent": DEFAULT_HEADERS["User-Agent"]}
+            resp = await client.get(url, headers=headers)
+            if resp.status_code != 200: return None
+            soup = BeautifulSoup(resp.text, "html.parser")
             
-            return {
-                "type": "pdf",
-                "url": download_url,
-                "title": title,
-                "author": author
-            }
+            download_url = None
+            for link in soup.find_all("a", href=True):
+                href = link["href"]
+                if "library.lol" in href or "libgen.li" in href:
+                    try:
+                        lr = await client.get(href, headers=headers)
+                        if lr.status_code == 200:
+                            lsoup = BeautifulSoup(lr.text, "html.parser")
+                            get_link = lsoup.find("a", string="GET") or lsoup.find("a", string="Cloudflare")
+                            if get_link and get_link.get("href"):
+                                download_url = get_link["href"]
+                                break
+                    except Exception:
+                        continue
             
+            if download_url:
+                title = "Unknown Book"
+                h1 = soup.find("h1")
+                if h1: title = h1.get_text(strip=True)
+                return {
+                    "type": "pdf",
+                    "url": download_url,
+                    "title": title,
+                    "author": "Unknown"
+                }
+        except Exception:
+            pass
         return None
 
     async def fetch_text(self, client, url: str):
@@ -1799,14 +1915,28 @@ async def unlock_article(
                     cached.license = adapter.license_type
                     cached.updated_at = datetime.utcnow()
                 else:
-                    cached = ContentCache(
-                        url=request.url,
-                        source=adapter.name,
-                        license=adapter.license_type,
-                        content_html=safe_html,
-                    )
-                    db.add(cached)
-                db.commit()
+                    # Double check if it exists now (race condition)
+                    existing = db.query(ContentCache).filter(ContentCache.url == request.url).first()
+                    if existing:
+                        existing.content_html = safe_html
+                        existing.source = adapter.name
+                        existing.license = adapter.license_type
+                        existing.updated_at = datetime.utcnow()
+                    else:
+                        cached = ContentCache(
+                            url=request.url,
+                            source=adapter.name,
+                            license=adapter.license_type,
+                            content_html=safe_html,
+                        )
+                        db.add(cached)
+                
+                try:
+                    db.commit()
+                except Exception as e:
+                    db.rollback()
+                    logger.warning(f"Cache update failed (race condition): {e}")
+                    # Continue without caching, just return result
                 
                 return {
                     "success": True,
@@ -1819,6 +1949,11 @@ async def unlock_article(
                 }
         except Exception as e:
             logger.error(f"Adapter {adapter.name} failed: {e}")
+            # Ensure DB session is clean for next adapter
+            try:
+                db.rollback()
+            except:
+                pass
             last_error = e
             continue
 
@@ -2025,9 +2160,12 @@ async def summarize_article(
     if not check_usage_limit(user, db, action="summarize"):
          raise HTTPException(status_code=402, detail="Daily summary limit reached. Upgrade for more.")
 
-    adapter = get_adapter(request.url)
-    if not adapter:
+    candidate_adapters = get_candidate_adapters(request.url)
+    if not candidate_adapters:
         raise HTTPException(status_code=400, detail="Unsupported source URL.")
+    
+    # Use the first capable adapter
+    adapter = candidate_adapters[0]
 
     # 1. Check Global Cache for Summary
     cached = db.query(ContentCache).filter(
@@ -2345,31 +2483,87 @@ async def search_content(q: str):
     if not q:
         raise HTTPException(status_code=400, detail="Missing query")
 
-    # Anna's Archive Mirrors
+    client = app.state.http
+    headers = {
+        "User-Agent": DEFAULT_HEADERS["User-Agent"],
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+    
+    # 1. OpenLibrary Search (Primary - Stable API)
+    try:
+        # Use fields to minimize payload
+        ol_url = f"https://openlibrary.org/search.json?q={quote(q)}&fields=title,author_name,cover_i,key,isbn&limit=15"
+        r = await client.get(ol_url, headers=headers, timeout=5.0)
+        
+        if r.status_code == 200:
+            data = r.json()
+            results = []
+            seen_titles = set()
+            
+            for doc in data.get("docs", []):
+                title = doc.get("title")
+                if not title: continue
+                
+                # Dedup by title to avoid clutter
+                if title.lower() in seen_titles: continue
+                seen_titles.add(title.lower())
+                
+                author = "Unknown"
+                if doc.get("author_name"):
+                    author = doc.get("author_name")[0]
+                
+                cover_id = doc.get("cover_i")
+                thumb = f"https://covers.openlibrary.org/b/id/{cover_id}-M.jpg" if cover_id else None
+                
+                search_query = f"{title} {author}"
+                target_url = f"https://libgen.is/search.php?req={quote(search_query)}"
+                
+                results.append({
+                    "title": title,
+                    "author": author,
+                    "url": target_url, 
+                    "source": "OpenLibrary",
+                    "thumbnail_url": thumb,
+                    "is_pdf": True
+                })
+            
+            logger.info(f"OpenLibrary found {len(results)} results for '{q}'")
+            if results:
+                return {"results": results}
+                
+    except Exception as e:
+        logger.warning(f"OpenLibrary search failed: {e}")
+
+    # 2. Libgen Search (Fallback)
+    libgen_mirrors = [
+        "https://libgen.is",
+        "https://libgen.rs",
+        "https://libgen.li",
+        "https://libgen.st",
+        "https://libgen.gs",
+        "https://libgen.lc",
+    ]
+
+    # Fallback to Anna's Archive mirrors if Libgen fails
     mirrors = [
         "https://annas-archive.org",
         "https://annas-archive.li",
         "https://annas-archive.se",
         "https://annas-archive.gs",
     ]
-    
-    client = app.state.http
-    headers = {
-        "User-Agent": DEFAULT_HEADERS["User-Agent"],
-        "Accept-Language": "en-US,en;q=0.9",
-    }
 
     for base_url in mirrors:
         search_url = f"{base_url}/search?q={quote(q)}"
         try:
             r = await client.get(search_url, headers=headers)
             if r.status_code == 200:
-                # Success! Parse this one.
                 soup = BeautifulSoup(r.text, "html.parser")
+                if "challenge" in r.url.path or "Challenge" in soup.title.string:
+                    continue
+
                 results = []
                 seen_md5s = set()
                 
-                # Parsing logic (Generic for Anna's)
                 for link in soup.find_all("a", href=True):
                     href = link["href"]
                     if "/md5/" in href:
@@ -2381,38 +2575,32 @@ async def search_content(q: str):
                         text_content = link.get_text(separator="|", strip=True).split("|")
                         text_content = [t for t in text_content if t]
                         
-                        if not text_content: 
-                            continue
+                        if not text_content: continue
                             
                         title = text_content[0]
-                        author = "Unknown"
-                        if len(text_content) > 1:
-                            author = text_content[1]
+                        author = text_content[1] if len(text_content) > 1 else "Unknown"
                         
                         thumb = None
                         img = link.find("img")
-                        if img and img.get("src"):
-                            thumb = img["src"]
+                        if img and img.get("src"): thumb = img["src"]
                         
                         results.append({
                             "title": title,
                             "author": author,
-                            "url": f"{base_url}{href}", # Use the working mirror base_url
+                            "url": f"{base_url}{href}",
                             "source": "Anna's Archive",
                             "thumbnail_url": thumb,
                             "is_pdf": True
                         })
-                        
-                        if len(results) >= 10:
-                            break
+                        if len(results) >= 10: break
                 
-                return {"results": results}
+                if results: return {"results": results}
             
         except Exception as e:
             logger.warning(f"Anna's search failed on {base_url}: {e}")
             continue
 
-    logger.error("All Anna's Archive mirrors failed.")
+    logger.error("All book search mirrors failed.")
     return {"results": []}
 
 @app.post("/api/create-order")

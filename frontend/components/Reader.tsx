@@ -296,9 +296,9 @@ export default function Reader({ html, pdfUrl, contentType = 'html', meta, url, 
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="max-w-4xl mx-auto px-6 py-12"
+        className="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-12"
       >
-          <div className="flex items-center justify-between mb-8 pb-4 border-b border-slate-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 sm:mb-8 pb-4 border-b border-slate-200 gap-4">
               <Button 
                   variant="ghost"
                   onClick={() => { 
@@ -306,14 +306,14 @@ export default function Reader({ html, pdfUrl, contentType = 'html', meta, url, 
                       if (audioRef.current) audioRef.current.pause();
                       onBack(); 
                   }}
-                  className="pl-0 hover:pl-2 transition-all text-slate-500 font-sans"
+                  className="pl-0 hover:pl-2 transition-all text-slate-500 font-sans self-start sm:self-auto"
               >
                   <ChevronLeft className="w-4 h-4 mr-1" />
                   Back
               </Button>
 
-              <div className="flex items-center gap-2">
-                  <div className="flex space-x-2">
+              <div className="flex items-center gap-2 overflow-x-auto pb-2 sm:pb-0 w-full sm:w-auto no-scrollbar">
+                  <div className="flex space-x-2 whitespace-nowrap">
                       {!session && (
                           <div className="text-xs text-indigo-600 font-medium mr-2 flex items-center font-sans"> 
                               Sign in for features -&gt;
@@ -339,14 +339,14 @@ export default function Reader({ html, pdfUrl, contentType = 'html', meta, url, 
 
           {/* Enhanced Metadata Header */}
           {meta && (
-              <div className="mb-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="mb-6 sm:mb-8 overflow-hidden rounded-xl sm:rounded-2xl border border-slate-200 bg-white shadow-sm">
                   {meta.thumbnail_url && contentType !== 'pdf' && (
-                      <div className="h-52 w-full overflow-hidden">
+                      <div className="h-40 sm:h-52 w-full overflow-hidden">
                           <img src={meta.thumbnail_url} alt="Cover" className="h-full w-full object-cover" />
                       </div>
                   )}
-                  <div className="p-6 text-slate-900">
-                      <h1 className="text-3xl font-bold mb-4 leading-tight font-serif">{meta.title}</h1>
+                  <div className="p-4 sm:p-6 text-slate-900">
+                      <h1 className="text-2xl sm:text-3xl font-bold mb-3 sm:mb-4 leading-tight font-serif">{meta.title}</h1>
                       <div className="flex items-center gap-4 text-sm text-slate-500 font-sans">
                           <div className="flex flex-col">
                               <span className="font-semibold text-slate-900">{meta.author || 'Unknown Author'}</span>

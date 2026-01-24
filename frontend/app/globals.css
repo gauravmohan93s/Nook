@@ -36,18 +36,24 @@ h1, h2, h3, h4, h5, h6 {
 
 .nook-title {
   font-family: var(--font-serif-family), serif !important;
-  font-size: 3rem !important;
+  font-size: 2.25rem !important; /* Mobile default */
   font-weight: 900 !important;
   line-height: 1.1 !important;
   margin-bottom: 1rem !important;
   color: #0F172A !important;
 }
 
+@media (min-width: 768px) {
+  .nook-title {
+    font-size: 3rem !important;
+  }
+}
+
 .nook-subtitle {
   font-family: var(--font-sans-family), sans-serif !important;
-  font-size: 1.25rem !important;
+  font-size: 1.125rem !important;
   color: #64748B !important;
-  margin-bottom: 2.5rem !important;
+  margin-bottom: 2rem !important;
   line-height: 1.5 !important;
   font-weight: 400 !important;
   border-left: 4px solid var(--color-primary);
@@ -55,7 +61,13 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 figure {
-  margin: 3rem 0 !important;
+  margin: 2rem 0 !important;
+}
+
+@media (min-width: 768px) {
+  figure {
+    margin: 3rem 0 !important;
+  }
 }
 
 .nook-img {
@@ -79,17 +91,24 @@ figcaption {
   background-color: #1E293B !important; /* Dark Slate BG */
   color: #E2E8F0 !important; /* Light Slate Text */
   border-radius: 8px !important;
-  padding: 1.5rem !important;
-  margin: 2rem 0 !important;
+  padding: 1rem !important;
+  margin: 1.5rem 0 !important;
   overflow-x: auto !important;
   border: 1px solid #334155 !important;
+}
+
+@media (min-width: 768px) {
+  #nook-reader pre {
+    padding: 1.5rem !important;
+    margin: 2rem 0 !important;
+  }
 }
 
 #nook-reader pre code {
   background-color: transparent !important;
   color: inherit !important;
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace !important;
-  font-size: 0.9em !important;
+  font-size: 0.85em !important;
   padding: 0 !important;
   font-weight: 500 !important;
 }
@@ -101,11 +120,18 @@ figcaption {
 }
 
 .prose {
-  font-size: 1.125rem !important;
-  line-height: 1.8 !important;
+  font-size: 1rem !important; /* Mobile base size */
+  line-height: 1.7 !important;
   color: #334155 !important;
   max-width: 700px !important;
   margin: 0 auto !important;
+}
+
+@media (min-width: 768px) {
+  .prose {
+    font-size: 1.125rem !important;
+    line-height: 1.8 !important;
+  }
 }
 
 .prose h2 {
