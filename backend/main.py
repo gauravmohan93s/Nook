@@ -25,6 +25,7 @@ import sentry_sdk
 import html as html_lib
 import re
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
+import markdown
 
 load_dotenv()
 
@@ -1308,11 +1309,65 @@ class SemanticScholarAdapter(BaseAdapter):
             return abstract
         return data.get("title") or None
 
+class JinaAdapter(BaseAdapter):
+    name = "jina"
+    license_type = "unknown"
+
+    def can_handle(self, url: str) -> bool:
+        # Use as a strong fallback for almost anything
+        return True
+
+    async def fetch_html(self, client, url: str):
+        jina_url = f"https://r.jina.ai/{url}"
+        # Jina returns Markdown. We need to convert to HTML.
+        text, status = await _fetch_text_limited(client, jina_url)
+        if not text:
+            return None
+            
+        if "Rate limit exceeded" in text:
+            logger.warning("Jina rate limit exceeded")
+            return None
+
+        # Convert Markdown to HTML
+        html_content = markdown.markdown(text)
+        
+        # Jina usually puts the title in the first line as H1 or Metadata
+        # We try to extract metadata from the markdown text if possible, 
+        # but for now let's just wrap it.
+        
+        # Try to find a title from the original URL or text
+        title = "Article" 
+        first_line = text.split('\n')[0].strip()
+        if first_line.startswith('# '):
+            title = first_line.replace('# ', '')
+            
+        return f"""
+        <div class="nook-container">
+            <header style="margin-bottom: 24px;">
+                <h1 class="nook-title">{title}</h1>
+            </header>
+            <div class="nook-markdown-body">
+                {html_content}
+            </div>
+            <p style="font-size: 0.8rem; margin-top: 40px; color: #666;">
+                Processed via Jina AI
+            </p>
+        </div>
+        """
+
+    async def fetch_text(self, client, url: str):
+        jina_url = f"https://r.jina.ai/{url}"
+        text, status = await _fetch_text_limited(client, jina_url)
+        return text
+
 class GenericAdapter(BaseAdapter):
     name = "generic"
     license_type = "unknown"
 
     def can_handle(self, url: str) -> bool:
+        # Generic is now a fallback if Jina fails (or we can swap order)
+        # Actually Jina is better than Generic (readability) usually.
+        # But Jina has rate limits.
         return True
 
     async def fetch_html(self, client, url: str):
@@ -1336,14 +1391,23 @@ ADAPTERS = [
     PubMedCentralAdapter(),
     OpenAlexAdapter(),
     SemanticScholarAdapter(),
+]
+FALLBACK_ADAPTERS = [
     GenericAdapter(),
+    JinaAdapter(),
 ]
 
-def get_adapter(url: str):
+def get_candidate_adapters(url: str):
+    candidates = []
+    # 1. Check specific adapters
     for adapter in ADAPTERS:
         if adapter.can_handle(url):
-            return adapter
-    return None
+            candidates.append(adapter)
+            break # Use the first specific match
+    
+    # 2. Add fallbacks
+    candidates.extend(FALLBACK_ADAPTERS)
+    return candidates
 
 CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", "3600"))
 
@@ -1378,16 +1442,18 @@ async def unlock_article(
         if not check_usage_limit(user, db, action="unlock"):
             raise HTTPException(status_code=402, detail="Daily unlock limit reached. Upgrade to unlock more.")
 
-    adapter = get_adapter(request.url)
-    if not adapter:
+    candidate_adapters = get_candidate_adapters(request.url)
+    if not candidate_adapters:
         raise HTTPException(status_code=400, detail="Unsupported source URL.")
 
-    cached = db.query(ContentCache).filter(
-        ContentCache.url == request.url,
-        ContentCache.source == adapter.name
-    ).first()
+    # Check cache for the *first* candidate (most specific)
+    # Or should we check cache for ANY?
+    # Key is (url, source).
+    # We check if we have a valid entry for this URL from ANY supported source?
+    # Let's keep it simple: check if we have *any* cached content for this URL.
+    cached = db.query(ContentCache).filter(ContentCache.url == request.url).first()
     
-    # Check if cache is fresh AND doesn't contain old local proxy links
+    # Check if cache is fresh AND valid
     is_valid_cache = (
         cached 
         and cached.content_html 
@@ -1414,52 +1480,55 @@ async def unlock_article(
             "success": True,
             "html": safe_html,
             "source": cached.source,
-            "license": cached.license or adapter.license_type,
+            "license": cached.license or "unknown",
             "remaining_reads": get_remaining_usage(user, db, "unlock") if user else 0,
             "metadata": meta
         }
 
     client = app.state.http
-    content = await adapter.fetch_html(client, request.url)
-
-    if content:
-        logger.info(f"Unlock received content: len={len(content)}")
-        logger.info(f"Content Start: {content[:200]}")
-        
-        # Basic parsing to verify it's an article
-        check_val = "<article" in content or "<h1" in content or "nook-title" in content
-        logger.info(f"Validation Check: {check_val}")
-        
-        if check_val:
-            logger.info("Validation passed. Sanitizing...")
-            safe_html = sanitize_html(content)
-            logger.info("Sanitization complete.")
-            meta = extract_metadata(safe_html)
-            meta, normalized_html = _normalize_metadata_from_html(safe_html, meta)
-            if normalized_html != safe_html:
-                safe_html = normalized_html
-            if cached:
-                cached.content_html = safe_html
-                cached.license = adapter.license_type
-                cached.updated_at = datetime.utcnow()
-            else:
-                cached = ContentCache(
-                    url=request.url,
-                    source=adapter.name,
-                    license=adapter.license_type,
-                    content_html=safe_html,
-                )
-                db.add(cached)
-            db.commit()
+    
+    # Try adapters in order
+    last_error = None
+    for adapter in candidate_adapters:
+        try:
+            logger.info(f"Attempting unlock with adapter: {adapter.name}")
+            content = await adapter.fetch_html(client, request.url)
             
-            return {
-                "success": True,
-                "html": safe_html,
-                "source": adapter.name,
-                "license": adapter.license_type,
-                "remaining_reads": get_remaining_usage(user, db, "unlock") if user else 0,
-                "metadata": meta
-            }
+            if content:
+                logger.info(f"Unlock success with {adapter.name}")
+                safe_html = sanitize_html(content)
+                meta = extract_metadata(safe_html)
+                meta, normalized_html = _normalize_metadata_from_html(safe_html, meta)
+                if normalized_html != safe_html:
+                    safe_html = normalized_html
+                    
+                if cached:
+                    cached.content_html = safe_html
+                    cached.source = adapter.name
+                    cached.license = adapter.license_type
+                    cached.updated_at = datetime.utcnow()
+                else:
+                    cached = ContentCache(
+                        url=request.url,
+                        source=adapter.name,
+                        license=adapter.license_type,
+                        content_html=safe_html,
+                    )
+                    db.add(cached)
+                db.commit()
+                
+                return {
+                    "success": True,
+                    "html": safe_html,
+                    "source": adapter.name,
+                    "license": adapter.license_type,
+                    "remaining_reads": get_remaining_usage(user, db, "unlock") if user else 0,
+                    "metadata": meta
+                }
+        except Exception as e:
+            logger.error(f"Adapter {adapter.name} failed: {e}")
+            last_error = e
+            continue
 
     raise HTTPException(status_code=503, detail="Could not retrieve article content from any source.")
 

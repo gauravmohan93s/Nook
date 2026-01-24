@@ -19,3 +19,4 @@ python-jose[cryptography]
 bleach
 sentry-sdk
 prometheus-client
+markdown
