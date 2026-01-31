@@ -17,6 +17,7 @@ export default function Dashboard() {
   const [savedArticles, setSavedArticles] = useState<Article[]>([]);
   const [fetchingLibrary, setFetchingLibrary] = useState(true);
   const [viewMode, setViewMode] = useState<'tile' | 'list'>('tile');
+  const [isAdmin, setIsAdmin] = useState(false);
   const apiUrl = getApiUrl();
 
   const fetchLibrary = useCallback(async () => {
@@ -26,6 +27,15 @@ export default function Dashboard() {
         if (session?.id_token) {
             headers['Authorization'] = `Bearer ${session.id_token}`;
         }
+        
+        // Fetch User Info (Admin Check)
+        const meRes = await fetch(`${apiUrl}/api/me`, { headers });
+        if (meRes.ok) {
+            const meData = await meRes.json();
+            setIsAdmin(meData.is_admin);
+        }
+
+        // Fetch Library
         const res = await fetch(`${apiUrl}/api/library`, { headers });
         if (res.ok) {
             const data = await res.json();
@@ -94,10 +104,12 @@ export default function Dashboard() {
             <Button variant="ghost" className="w-full justify-start text-slate-500 hover:text-slate-900" onClick={() => router.push('/dashboard/settings')}>
                 <Settings className="w-4 h-4 mr-3" /> Settings
             </Button>
-             {/* Admin Link (Hidden usually) */}
-             <Button variant="ghost" className="w-full justify-start text-slate-500 hover:text-slate-900" onClick={() => router.push('/admin')}>
-                <Shield className="w-4 h-4 mr-3" /> Admin
-            </Button>
+             {/* Admin Link */}
+             {isAdmin && (
+                <Button variant="ghost" className="w-full justify-start text-slate-500 hover:text-slate-900" onClick={() => router.push('/admin')}>
+                    <Shield className="w-4 h-4 mr-3" /> Admin
+                </Button>
+             )}
         </div>
 
         <div className="pt-6 border-t border-slate-200">

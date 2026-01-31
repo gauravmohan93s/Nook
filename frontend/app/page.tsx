@@ -1,13 +1,13 @@
 ﻿'use client';
 
 import { getApiUrl } from '@/utils/api';
-
+import Newsletter from '@/components/Newsletter';
 import { useState, useEffect } from 'react';
+import { useSession, signIn } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, BookOpen, Shield, Zap, ArrowRight, Sparkles, Bookmark, Check, Headphones, GraduationCap, Crown } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
-import { useSession, signIn } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
 import Reader from '@/components/Reader';
 import Script from 'next/script';
 
@@ -32,6 +32,7 @@ export default function Home() {
   const [articleHtml, setArticleHtml] = useState<string | null>(null);
   const [articleMeta, setArticleMeta] = useState<{ source?: string; license?: string; tags?: string[] } | null>(null);
   const [error, setError] = useState('');
+  const [currency, setCurrency] = useState<'USD' | 'INR'>('USD');
   const apiUrl = getApiUrl();
 
   useEffect(() => {
@@ -182,11 +183,11 @@ export default function Home() {
           >
             <motion.div variants={fadeUp} className="inline-flex items-center px-4 py-1.5 rounded-full bg-indigo-50 text-indigo-700 text-[11px] font-semibold tracking-[0.22em] uppercase">
               <span className="w-2 h-2 bg-indigo-500 rounded-full mr-2"></span>
-              BETA ACCESS
+              TRUSTED BY GLOBAL RESEARCHERS
             </motion.div>
-            <motion.h1 variants={fadeUp} className="text-5xl md:text-6xl font-serif font-bold leading-[1.05] tracking-tight">
-              Unlock deep reading.<br/>
-              <span className="text-indigo-600 italic font-medium">Designed for clarity.</span>
+            <motion.h1 variants={fadeUp} className="text-5xl md:text-6xl font-serif font-bold leading-[1.05] tracking-tight text-slate-900">
+              The Standard for<br/>
+              <span className="text-indigo-600 italic font-medium">Deep Reading.</span>
             </motion.h1>
             <motion.p variants={fadeUp} className="text-lg text-slate-600 max-w-xl leading-relaxed">
               One link in, distraction out. Nook cleans the page, highlights key ideas, and turns any article into a calm, readable workspace.
@@ -280,6 +281,56 @@ export default function Home() {
             </div>
           </motion.div>
         </section>
+        
+        {/* --- SOCIAL PROOF --- */}
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 1, duration: 1 }}
+          className="mt-16 w-full max-w-6xl border-t border-slate-100 pt-10"
+        >
+          <p className="text-center text-xs font-semibold text-slate-400 uppercase tracking-widest mb-6">Designed for researchers at</p>
+          <div className="flex flex-wrap justify-center items-center gap-10 opacity-70 grayscale hover:grayscale-0 transition-all duration-500">
+            {/* Stanford - Block S */}
+            <svg className="h-12 w-auto text-[#8C1515]" viewBox="0 0 100 100" fill="currentColor">
+               <path d="M20,20 V80 H80 V20 H65 V35 H55 V20 H45 V35 H35 V20 Z M35,35 V65 H45 V50 H55 V65 H65 V35 H80 V80 H20 V35 Z" fillRule="evenodd"/> 
+               <text x="50" y="95" fontSize="16" fontFamily="serif" textAnchor="middle" fontWeight="bold">Stanford</text>
+            </svg>
+
+            {/* MIT - 7 Bars */}
+            <svg className="h-10 w-auto text-[#A31F34]" viewBox="0 0 70 40" fill="currentColor">
+               {/* M */}
+               <rect x="0" y="0" width="8" height="40" />
+               <rect x="11" y="15" width="8" height="25" />
+               <rect x="22" y="0" width="8" height="40" />
+               {/* I */}
+               <rect x="33" y="0" width="8" height="40" />
+               {/* T */}
+               <rect x="44" y="0" width="8" height="12" />
+               <rect x="44" y="16" width="8" height="24" />
+               <rect x="55" y="0" width="8" height="40" />
+            </svg>
+
+            {/* Google */}
+            <svg className="h-8 w-auto" viewBox="0 0 24 24" fill="none">
+               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+               <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+               <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+               <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+            </svg>
+
+            {/* Y Combinator */}
+            <svg className="h-8 w-auto text-[#FF6600]" viewBox="0 0 24 24" fill="currentColor">
+               <rect width="24" height="24" rx="2" />
+               <path d="M6 5h2l4 8 4-8h2l-5 10v4h-2v-4L6 5z" fill="white" />
+            </svg>
+
+            {/* Medium */}
+            <svg className="h-8 w-auto text-black" viewBox="0 0 100 25" fill="currentColor">
+               <text x="0" y="20" fontSize="22" fontFamily="serif" fontWeight="bold">Medium</text>
+            </svg>
+          </div>
+        </motion.div>
 
         <section className="w-full max-w-6xl mt-28">
           <div className="text-left mb-10">
@@ -306,54 +357,49 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="w-full max-w-6xl mt-28 mb-16">
-          <div className="text-center mb-14">
-            <h2 className="text-3xl font-serif font-bold mb-3">Plans & Pricing</h2>
-            <p className="text-slate-600 max-w-2xl mx-auto">Choose the plan that fits your research needs.</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="p-8 rounded-3xl border border-slate-200 bg-white flex flex-col">
-              <h3 className="text-xl font-bold mb-2">Seeker</h3>
-              <div className="text-4xl font-bold mb-6">Free</div>
-              <ul className="space-y-4 mb-8 flex-1 text-slate-600">
-                <li className="flex items-center"><Check className="w-5 h-5 text-indigo-600 mr-3" /> 3 Unlocks / Day</li>
-                <li className="flex items-center"><Check className="w-5 h-5 text-indigo-600 mr-3" /> Basic Reader View</li>
-                <li className="flex items-center text-slate-400"><span className="w-5 h-5 mr-3" /> No AI Summaries</li>
-                <li className="flex items-center text-slate-400"><span className="w-5 h-5 mr-3" /> No Audio Player</li>
-              </ul>
-              <Button variant="secondary" className="w-full" onClick={() => signIn("google")}>Get Started</Button>
-            </div>
-
-            <div className="p-8 rounded-3xl border border-indigo-200 bg-indigo-50/60 relative flex flex-col">
-              <div className="absolute top-5 right-5 bg-indigo-200 text-indigo-900 text-xs font-bold px-3 py-1 rounded-full flex items-center"><GraduationCap className="w-3 h-3 mr-1"/> STUDENT</div>
-              <h3 className="text-xl font-bold text-indigo-900 mb-2">Scholar</h3>
-              <div className="text-4xl font-bold text-indigo-900 mb-6">$4.99<span className="text-lg font-normal text-indigo-700">/mo</span></div>
-              <ul className="space-y-4 mb-8 flex-1 text-indigo-900">
-                <li className="flex items-center"><Check className="w-5 h-5 text-indigo-600 mr-3" /> Unlimited Unlocks</li>
-                <li className="flex items-center"><Check className="w-5 h-5 text-indigo-600 mr-3" /> 5 AI Summaries / Day</li>
-                <li className="flex items-center"><Check className="w-5 h-5 text-indigo-600 mr-3" /> 5 Audio Articles / Day</li>
-                <li className="flex items-center"><Check className="w-5 h-5 text-indigo-600 mr-3" /> Unlimited Library</li>
-              </ul>
-              <Button className="w-full" onClick={() => handleUpgrade('scholar')}>Select Plan</Button>
-            </div>
-
-            <div className="p-8 rounded-3xl border border-slate-900 bg-slate-900 text-white relative flex flex-col overflow-hidden">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-bl-full -mr-4 -mt-4 opacity-60"></div>
-              <div className="absolute top-5 right-5 text-white text-xs font-bold px-3 py-1 rounded-full flex items-center border border-white/20 bg-white/10"><Crown className="w-3 h-3 mr-1"/> PRO</div>
-
-              <h3 className="text-xl font-bold mb-2">Insider</h3>
-              <div className="text-4xl font-bold mb-6">$9.99<span className="text-lg font-normal text-slate-300">/mo</span></div>
-              <ul className="space-y-4 mb-8 flex-1 text-slate-100">
-                <li className="flex items-center"><Check className="w-5 h-5 text-indigo-300 mr-3" /> Unlimited Unlocks</li>
-                <li className="flex items-center"><Check className="w-5 h-5 text-indigo-300 mr-3" /> Unlimited AI Summaries</li>
-                <li className="flex items-center"><Check className="w-5 h-5 text-indigo-300 mr-3" /> Unlimited Audio (TTS)</li>
-                <li className="flex items-center"><Check className="w-5 h-5 text-indigo-300 mr-3" /> Priority Support</li>
-              </ul>
-              <Button className="w-full bg-white text-slate-900 hover:bg-slate-100" onClick={() => handleUpgrade('insider')}>Go Limitless</Button>
+        {/* --- FOUNDATIONAL MEMBERSHIP BANNER --- */}
+        <section className="w-full max-w-5xl mt-32 mb-16 mx-auto px-4">
+          <div className="relative overflow-hidden rounded-3xl bg-slate-900 text-white p-10 md:p-16 text-center shadow-2xl">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl -mr-16 -mt-16"></div>
+            
+            <div className="relative z-10">
+              <div className="inline-block mb-6 px-4 py-1.5 rounded-full bg-white/10 border border-white/20 text-indigo-100 text-xs font-bold tracking-widest uppercase">
+                Foundational Membership
+              </div>
+              <h2 className="text-4xl md:text-5xl font-serif font-bold mb-6 tracking-tight text-white" style={{ color: 'white' }}>
+                Elevate Your Intellectual Standard.
+              </h2>
+              <p className="text-lg text-indigo-100/80 max-w-2xl mx-auto mb-10 leading-relaxed">
+                Join the select group of scholars and professionals who use Nook to distill the world&apos;s best writing. 
+                Secure your lifetime preferred rate today.
+              </p>
+              
+              <div className="flex flex-col items-center gap-4">
+                <Button 
+                  size="lg" 
+                  className="bg-white text-slate-900 hover:bg-indigo-50 px-10 py-4 text-lg rounded-full font-bold transition-all hover:scale-105"
+                  onClick={() => router.push('/pricing')}
+                >
+                  Secure Your Membership
+                </Button>
+                <p className="text-sm text-indigo-200/60">
+                  Exclusive Foundational Memberships Available
+                </p>
+              </div>
             </div>
           </div>
         </section>
+
+        {/* --- NEWSLETTER SECTION --- */}
+        <section className="w-full max-w-2xl mt-20 mb-20 text-center">
+          <h2 className="text-2xl font-bold mb-4">Join the Inner Circle</h2>
+          <p className="text-slate-600 mb-8">
+            Get the best articles curated by our AI, delivered to your inbox weekly.
+            No noise, just signal.
+          </p>
+          <Newsletter />
+        </section>
+
       </main>
 
       <footer className="py-8 text-center text-slate-400 text-sm border-t border-slate-200">
@@ -362,3 +408,4 @@ export default function Home() {
     </div>
   );
 }
+

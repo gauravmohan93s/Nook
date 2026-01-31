@@ -4,11 +4,14 @@ import { getApiUrl } from '@/utils/api';
 
 import { useEffect, useState } from 'react';
 import { useSession } from "next-auth/react";
+import { useRouter } from 'next/navigation';
 import { BookOpen, Clock } from "lucide-react";
+import { Button } from '@/components/ui/Button';
 import { Article } from '../../types/api';
 
 export default function Library() {
   const { data: session, status } = useSession();
+  const router = useRouter();
   const [articles, setArticles] = useState<Article[]>([]);
   const [fetching, setFetching] = useState(false);
   const apiUrl = getApiUrl();
@@ -67,9 +70,12 @@ export default function Library() {
                                 <span>Saved on {article.created_at ? new Date(article.created_at).toLocaleDateString() : 'Unknown date'}</span>
                             </div>
                         </div>
-                        <a href={article.url} target="_blank" className="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 transition-colors text-sm font-medium">
-                            Read Original
-                        </a>
+                        <Button 
+                            onClick={() => router.push(`/read?url=${encodeURIComponent(article.url)}`)}
+                            className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+                        >
+                            Read Now
+                        </Button>
                     </div>
                 ))}
              </div>

@@ -1,7 +1,7 @@
 'use client';
 
 import { getApiUrl } from '@/utils/api';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/Button';
@@ -27,13 +27,22 @@ interface BookResult {
 interface DiscoverData {
     featured: ArticlePreview[];
     latest: ArticlePreview[];
+    categories?: string[];
 }
 
 export default function DiscoverPage() {
     const router = useRouter();
-    const { status } = useSession();
+    const searchParams = useSearchParams();
+    const { status, data: session } = useSession();
+    
     const [url, setUrl] = useState('');
     const [activeTab, setActiveTab] = useState<'feeds' | 'books'>('feeds');
+    
+    // Sync state with URL param
+    const initialCat = searchParams.get('category') || 'All';
+    const [category, setCategoryState] = useState(initialCat);
+    
+    const [categories, setCategories] = useState<string[]>(["All"]);
     const [searchQuery, setSearchQuery] = useState('');
     const [bookResults, setBookResults] = useState<BookResult[]>([]);
     const [isSearchingBooks, setIsSearchingBooks] = useState(false);
@@ -41,6 +50,14 @@ export default function DiscoverPage() {
     const [data, setData] = useState<DiscoverData | null>(null);
     const [loading, setLoading] = useState(true);
     const apiUrl = getApiUrl();
+
+    // Helper to update Category and URL
+    const setCategory = (newCat: string) => {
+        setCategoryState(newCat);
+        const params = new URLSearchParams(searchParams.toString());
+        params.set('category', newCat);
+        router.replace(`?${params.toString()}`);
+    };
 
     useEffect(() => {
         if (status === 'unauthenticated') {
@@ -50,10 +67,20 @@ export default function DiscoverPage() {
 
     useEffect(() => {
         const fetchData = async () => {
+            setLoading(true);
             try {
-                const res = await fetch(`${apiUrl}/api/discover`);
+                const headers: HeadersInit = {};
+                if (session?.id_token) {
+                    headers['Authorization'] = `Bearer ${session.id_token}`;
+                }
+                
+                const res = await fetch(`${apiUrl}/api/discover?category=${category}`, { headers });
                 if (res.ok) {
-                    setData(await res.json());
+                    const json = await res.json();
+                    setData(json);
+                    if (json.categories) {
+                        setCategories(json.categories);
+                    }
                 }
             } catch (e) {
                 console.error("Failed to fetch discover data", e);
@@ -61,8 +88,10 @@ export default function DiscoverPage() {
                 setLoading(false);
             }
         };
-        fetchData();
-    }, [apiUrl]);
+        if (activeTab === 'feeds' && status === 'authenticated') {
+            fetchData();
+        }
+    }, [apiUrl, category, activeTab, session, status]);
 
     const handleUnlock = () => {
         if (!url) return;
@@ -118,7 +147,7 @@ export default function DiscoverPage() {
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6 sm:space-y-8">
                         {/* URL Paste Input */}
                         <div className="bg-white border border-slate-200 rounded-xl sm:rounded-2xl p-4 sm:p-8 shadow-sm">
-                            <div className="flex gap-3 flex-col sm:flex-row">
+                            <div className="flex gap-3 flex-col sm:flex-row mb-6">
                                 <input
                                     type="url"
                                     placeholder="Paste a Medium, Arxiv, YouTube, or web link..."
@@ -127,6 +156,23 @@ export default function DiscoverPage() {
                                     onChange={(e) => setUrl(e.target.value)}
                                 />
                                 <Button onClick={handleUnlock} className="py-3 px-6 w-full sm:w-auto">Unlock</Button>
+                            </div>
+                            
+                            {/* Category Filters */}
+                            <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
+                                {categories.map(cat => (
+                                    <button
+                                        key={cat}
+                                        onClick={() => setCategory(cat)}
+                                        className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${
+                                            category === cat 
+                                            ? 'bg-indigo-600 text-white' 
+                                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                        }`}
+                                    >
+                                        {cat}
+                                    </button>
+                                ))}
                             </div>
                         </div>
 

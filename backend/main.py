@@ -289,10 +289,161 @@ def get_current_user(authorization: str = Header(None), db: Session = Depends(ge
         return None
 
 TIER_LIMITS = {
-    "seeker": {"unlock": 3, "summarize": 0, "tts": 0},
-    "scholar": {"unlock": 9999, "summarize": 5, "tts": 5},
-    "insider": {"unlock": 9999, "summarize": 9999, "tts": 9999} # effectively unlimited
+    "seeker": {"unlock": 3, "summarize": 0, "tts": 0, "chat": 0},
+    "scholar": {"unlock": 9999, "summarize": 5, "tts": 5, "chat": 10},
+    "insider": {"unlock": 9999, "summarize": 9999, "tts": 9999, "chat": 9999} 
 }
+
+# ... existing code ...
+
+class ChatRequest(BaseModel):
+    url: str
+    message: str
+
+@app.post("/api/chat")
+async def chat_with_article(
+    request: ChatRequest,
+    http_request: Request,
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
+    user = get_current_user(authorization, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Login required")
+    
+    if not check_usage_limit(user, db, action="chat"):
+        raise HTTPException(status_code=402, detail="Daily chat limit reached. Upgrade for more.")
+
+    # 1. Get article content from cache
+    cached = db.query(ContentCache).filter(ContentCache.url == request.url).first()
+    if not cached or not (cached.content_text or cached.content_html):
+        raise HTTPException(status_code=404, detail="Article content not found. Please unlock it first.")
+
+    content = cached.content_text
+    if not content and cached.content_html:
+        content = extract_text_from_html(cached.content_html)
+    
+    if not content:
+        raise HTTPException(status_code=500, detail="Could not extract text for chat.")
+
+    # 2. Prepare Context
+    tier = user.tier if user.tier in TIER_LIMITS else "seeker"
+    
+    # Token Optimization
+    context_limits = {
+        "insider": 32000,
+        "scholar": 15000,
+        "seeker": 6000
+    }
+    limit = context_limits.get(tier, 6000)
+    truncated_content = content[:limit]
+    
+    context_prompt = f"""
+    You are 'Nook AI', a helpful research assistant. 
+    Use the provided article text to answer the user's question accurately.
+    If the answer isn't in the text, politely say you don't know based on this specific article.
+    Use Markdown formatting (bold, lists) to make the answer readable.
+    
+    ARTICLE CONTENT (Truncated to {len(truncated_content)} chars):
+    {truncated_content}
+    
+    USER QUESTION:
+    {request.message}
+    """
+
+    # 3. Provider Loop
+    provider_order = _parse_provider_order(
+        os.getenv("CHAT_PROVIDER_ORDER", "gemini,openrouter,groq,qubrid"),
+        ["gemini"]
+    )
+    
+    client = http_request.app.state.http
+    last_error = None
+
+    for provider in provider_order:
+        try:
+            if provider == "gemini":
+                if not gemini_client: continue
+                models = get_models_for_tier(tier)
+                for model_id in models:
+                    try:
+                        response = gemini_client.models.generate_content(
+                            model=model_id,
+                            contents=context_prompt
+                        )
+                        return {
+                            "answer": response.text,
+                            "model": model_id,
+                            "provider": "gemini",
+                            "remaining_chats": get_remaining_usage(user, db, "chat")
+                        }
+                    except Exception as e:
+                        logger.warning(f"Chat failed with Gemini model {model_id}: {e}")
+                        last_error = e
+                        continue
+            
+            elif provider == "openrouter":
+                if not OPENROUTER_API_KEY: continue
+                headers = {
+                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                    "Content-Type": "application/json"
+                }
+                if OPENROUTER_SITE_URL: headers["HTTP-Referer"] = OPENROUTER_SITE_URL
+                if OPENROUTER_APP_NAME: headers["X-Title"] = OPENROUTER_APP_NAME
+                
+                payload = {
+                    "model": OPENROUTER_MODELS[0] if OPENROUTER_MODELS else "google/gemini-2.0-flash-001",
+                    "messages": [{"role": "user", "content": context_prompt}]
+                }
+                resp = await client.post("https://openrouter.ai/api/v1/chat/completions", json=payload, headers=headers, timeout=20.0)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    ans = _extract_summary_from_response(data) # Reusing helper
+                    if ans:
+                        return {"answer": ans, "provider": "openrouter", "remaining_chats": get_remaining_usage(user, db, "chat")}
+                last_error = f"OpenRouter status {resp.status_code}"
+
+            elif provider == "groq":
+                if not GROQ_API_KEY: continue
+                headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
+                payload = {
+                    "model": GROQ_MODELS[0] if GROQ_MODELS else "llama-3.1-70b-versatile",
+                    "messages": [{"role": "user", "content": context_prompt}]
+                }
+                resp = await client.post("https://api.groq.com/openai/v1/chat/completions", json=payload, headers=headers, timeout=20.0)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    ans = _extract_summary_from_response(data)
+                    if ans:
+                        return {"answer": ans, "provider": "groq", "remaining_chats": get_remaining_usage(user, db, "chat")}
+                last_error = f"Groq status {resp.status_code}"
+
+            elif provider == "qubrid":
+                if not QUBRID_API_KEY and not QUBRID_AUTH_VALUE: continue
+                headers = {"Content-Type": "application/json"}
+                if QUBRID_API_KEY: headers["Authorization"] = f"Bearer {QUBRID_API_KEY}"
+                elif QUBRID_AUTH_VALUE: headers[QUBRID_AUTH_HEADER] = QUBRID_AUTH_VALUE
+                
+                payload = {
+                    "model": QUBRID_MODELS[0] if QUBRID_MODELS else "openai/gpt-oss-120b",
+                    "messages": [{"role": "user", "content": context_prompt}]
+                }
+                resp = await client.post(QUBRID_API_BASE, json=payload, headers=headers, timeout=20.0)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    ans = _extract_summary_from_response(data)
+                    if ans:
+                        return {"answer": ans, "provider": "qubrid", "remaining_chats": get_remaining_usage(user, db, "chat")}
+                last_error = f"Qubrid status {resp.status_code}"
+
+        except Exception as e:
+            logger.warning(f"Provider {provider} failed: {e}")
+            last_error = e
+            continue
+            
+    logger.error(f"All chat models failed. Last error: {last_error}")
+    raise HTTPException(status_code=500, detail="AI Assistant is currently unavailable.")
+
 
 def _get_usage_log(user: User, db: Session, action: str):
     today_str = str(date.today())
@@ -430,13 +581,31 @@ def _parse_model_list(value: str | None, fallback: list[str]) -> list[str]:
     return fallback
 
 def get_models_for_tier(tier: str) -> list[str]:
-    default_models = [
-        os.getenv("GEMINI_MODEL", "gemini-2.0-flash"),
-        os.getenv("GEMINI_MODEL_FALLBACK", "gemini-1.5-flash"),
-    ]
     tier = (tier or "seeker").lower()
+    
+    # Defaults based on verified available models
+    defaults = {
+        "insider": ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash"],
+        "scholar": ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-flash-latest"],
+        "seeker": ["gemini-2.0-flash-lite", "gemini-flash-lite-latest", "gemini-2.0-flash"],
+    }
+    
+    # Check Env overrides
     env_key = f"GEMINI_MODELS_{tier.upper()}"
-    return _parse_model_list(os.getenv(env_key), default_models)
+    configured = _parse_model_list(os.getenv(env_key), [])
+    
+    # Start with configured, then append defaults as fallback/safety net
+    raw_list = configured + defaults.get(tier, defaults["seeker"])
+    
+    # Deduplicate preserving order
+    final_list = []
+    seen = set()
+    for m in raw_list:
+        if m and m not in seen:
+            final_list.append(m)
+            seen.add(m)
+            
+    return final_list
 
 def _parse_provider_order(value: str | None, fallback: list[str]) -> list[str]:
     if value:
@@ -1817,17 +1986,32 @@ async def unlock_article(
         raise HTTPException(status_code=400, detail="URL not allowed.")
     # 1. Check Limits
     user = get_current_user(authorization, db)
+    
+    # Rate Limit (Abuse protection - 30 req/min)
     if not check_rate_limit(
-        "unlock",
+        "unlock_abuse",
         http_request,
         user,
         int(os.getenv("RATE_LIMIT_UNLOCK_PER_MINUTE", "30")),
         60
     ):
         raise HTTPException(status_code=429, detail="Rate limit exceeded. Please try again later.")
+
+    # Tier / Daily Limits
     if user:
         if not check_usage_limit(user, db, action="unlock"):
             raise HTTPException(status_code=402, detail="Daily unlock limit reached. Upgrade to unlock more.")
+    else:
+        # Anonymous User Limit (e.g., 1 per day tracked by IP)
+        # We use the rate limit store with a 24h window
+        if not check_rate_limit(
+            "unlock_daily_anon",
+            http_request,
+            None, # Force IP-based key
+            1,
+            86400 # 24 hours
+        ):
+             raise HTTPException(status_code=401, detail="Free preview limit reached. Please sign in to read more.")
 
     candidate_adapters = get_candidate_adapters(request.url)
     if not candidate_adapters:
@@ -2428,32 +2612,70 @@ class ArticlePreview(BaseModel):
     published: str = ""
 
 @app.get("/api/discover")
-def get_discover_content():
-    # 1. Curated Featured (Static for now, can be DB driven later)
+def get_discover_content(
+    category: str = "All",
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
+    # Log User Interest for future ML
+    user = get_current_user(authorization, db)
+    if user and category != "All":
+        # We use a distinct action prefix to easily query preferences later
+        # e.g. "interest:AI", "interest:Tech"
+        # We don't enforce limits here, just logging.
+        try:
+            log = _get_usage_log(user, db, f"interest:{category}")
+            log.count += 1
+            db.commit()
+        except Exception as e:
+            logger.warning(f"Failed to log interest: {e}")
+
+    # 1. Curated Featured
     featured = [
         ArticlePreview(
             title="The Age of AI Agents", 
             url="https://medium.com/failed-stork/the-age-of-ai-agents-7e6140502758",
             source="Medium",
-            summary="A deep dive into how autonomous agents are reshaping software."
+            summary="A deep dive into how autonomous agents are reshaping software.",
+            published="2025-10-15"
         ),
         ArticlePreview(
             title="Attention Is All You Need", 
             url="https://arxiv.org/abs/1706.03762",
             source="Arxiv",
-            summary="The landmark paper that introduced the Transformer architecture."
+            summary="The landmark paper that introduced the Transformer architecture.",
+            published="2017-06-12"
         )
     ]
 
     # 2. Dynamic RSS Feeds
     rss_sources = [
-        {"name": "OpenAI Blog", "url": "https://openai.com/blog/rss.xml"},
-        {"name": "MIT Tech Review", "url": "https://www.technologyreview.com/feed/"},
-        {"name": "Google AI", "url": "https://blog.google/technology/ai/rss/"}
+        {"name": "OpenAI", "url": "https://openai.com/blog/rss.xml", "category": "AI"},
+        {"name": "MIT Tech Review", "url": "https://www.technologyreview.com/feed/", "category": "Tech"},
+        {"name": "Google AI", "url": "https://blog.google/technology/ai/rss/", "category": "AI"},
+        {"name": "NASA", "url": "https://www.nasa.gov/rss/dyn/breaking_news.rss", "category": "Science"},
+        {"name": "Nature", "url": "https://www.nature.com/nature.rss", "category": "Science"},
+        {"name": "Y Combinator", "url": "https://blog.ycombinator.com/rss/", "category": "Startup"},
+        {"name": "Paul Graham", "url": "http://www.aaronsw.com/2002/feeds/pgessays.rss", "category": "Startup"},
+        {"name": "Verge", "url": "https://www.theverge.com/rss/index.xml", "category": "Tech"},
+        {"name": "Wired", "url": "https://www.wired.com/feed/rss", "category": "Tech"},
+        {"name": "Hacker News", "url": "https://hnrss.org/best", "category": "Tech"},
+        {"name": "PsyPost", "url": "https://feeds.feedburner.com/psypost", "category": "Health"},
     ]
 
+    # Extract unique categories dynamically
+    unique_cats = sorted(list(set(s["category"] for s in rss_sources)))
+    available_categories = ["All"] + unique_cats
+
+    # Filter sources
+    if category and category != "All":
+        rss_sources = [s for s in rss_sources if s["category"].lower() == category.lower()]
+
     latest = []
-    for source in rss_sources:
+    # Limit to 6 sources to prevent timeout
+    limit_sources = rss_sources if category != "All" else rss_sources[:6]
+    
+    for source in limit_sources:
         try:
             feed = feedparser.parse(source["url"])
             for entry in feed.entries[:2]: # Get top 2 from each
@@ -2470,7 +2692,8 @@ def get_discover_content():
 
     return {
         "featured": featured,
-        "latest": latest
+        "latest": latest,
+        "categories": available_categories
     }
 
 # --- Payments (Razorpay for India) ---

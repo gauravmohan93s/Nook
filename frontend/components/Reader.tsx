@@ -3,11 +3,12 @@
 import { getApiUrl } from '@/utils/api';
 
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { motion } from 'framer-motion';
-import { ChevronLeft, Sparkles, Bookmark, Pause, Play } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ChevronLeft, Sparkles, Bookmark, Pause, Play, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useSession, signIn } from 'next-auth/react';
 import DOMPurify from 'dompurify';
+import ChatPanel from './ChatPanel';
 
 interface ReaderProps {
   html: string;
@@ -29,6 +30,7 @@ interface ReaderProps {
 export default function Reader({ html, pdfUrl, contentType = 'html', meta, url, onBack }: ReaderProps) {
   const { data: session } = useSession();
   const [isSummarizing, setIsSummarizing] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
   const [summary, setSummary] = useState('');
   const [summaryMeta, setSummaryMeta] = useState<{ provider?: string; model?: string; remaining?: number } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -329,6 +331,10 @@ export default function Reader({ html, pdfUrl, contentType = 'html', meta, url, 
                           <Sparkles className="w-4 h-4 mr-2 text-indigo-500" />
                           {isSummarizing ? 'Thinking...' : 'Summarize'}
                       </Button>
+                      <Button variant="secondary" size="sm" onClick={() => setIsChatOpen(true)}>
+                          <MessageSquare className="w-4 h-4 mr-2 text-indigo-500" />
+                          Chat
+                      </Button>
                       <Button variant="secondary" size="sm" onClick={handleSave} disabled={isSaving}>
                           <Bookmark className="w-4 h-4 mr-2" />
                           Save
@@ -336,6 +342,12 @@ export default function Reader({ html, pdfUrl, contentType = 'html', meta, url, 
                   </div>
               </div>
           </div>
+
+          <AnimatePresence>
+              {isChatOpen && (
+                  <ChatPanel url={url} onClose={() => setIsChatOpen(false)} />
+              )}
+          </AnimatePresence>
 
           {/* Enhanced Metadata Header */}
           {meta && (
