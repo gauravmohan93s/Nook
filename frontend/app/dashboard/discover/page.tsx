@@ -2,32 +2,6 @@
 
 import { getApiUrl } from '@/utils/api';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
-import { Button } from '@/components/ui/Button';
-import { BookOpen, Globe, Rss, ArrowRight, Loader2, Search, Library } from 'lucide-react';
-import { motion } from 'framer-motion';
-
-interface ArticlePreview {
-    title: string;
-    url: string;
-    source: string;
-    summary: string;
-    published: string;
-}
-
-interface BookResult {
-    title: string;
-    author: string;
-    url: string; // Detail page
-    thumbnail_url?: string;
-    source: string;
-}
-
-'use client';
-
-import { getApiUrl } from '@/utils/api';
-import { useRouter, useSearchParams } from 'next/navigation';
 import { useState, useEffect, Suspense } from 'react';
 import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/Button';
